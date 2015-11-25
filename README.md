@@ -4,14 +4,21 @@ Code of study on the relationship between 1/f and periodic brain dynamics (alpha
 
 # organization of the repository
 
-## tracked 
+## tracked files
 
-### library
+### ./library
 
 The modularized code that is used here and there. No need to install,
 assuming that you run your python interpreter from the root directory.
 
-### scripts
+In a script, simply
+
+```Ptyhon
+import library as lib
+from library.stats import compute_corr
+```
+
+### ./scripts
 
 The actual scripts to achieve defined steps. Don't cd here,
 call `run scripts/run_XXX.py` from the root directory.
@@ -30,34 +37,34 @@ Examples:
 `plot_main_inverse_1of-grand-average.py`
 `...`
 
-#### config file
+#### ./scripts/config.py file
 
 The config.py file has it. The variables and parameters, but also a command
 line parser.
 
-### examples
+### ./examples
 
 playground, room for trying things
 
-### bin
+### ./bin
 
 command line programs, mostly for parallelization
 
-## untracked
+## untracked files
 
-# data
+# ./data
 
 Here you have the data, as symbolic links. Please do it yourself.
 
-## subjects
+## ./data/subjects
 
 in `data/subject` you should have a link to the freesurfer dynacomp directory
 
-## MEG
+## ./data/MEG
 
 in `data/MEG` you should have a link to the MEG dynacomp directory
 
-# results
+# ./results
 
 The provenance tracking routines from [The meeg_preprocessing package](https://github.com/dengemann/meeg-preprocessing/)
 will save the labled output script-wise here. Will not be commited. It's local.
