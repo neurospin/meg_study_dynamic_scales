@@ -57,6 +57,12 @@ in `data/subject` you should have a link to the freesurfer dynacomp directory
 
 in `data/MEG` you should have a link to the MEG dynacomp directory
 
+# results
+
+The provenance tracking routines from [The meeg_preprocessing package](https://github.com/dengemann/meeg-preprocessing/)
+will save the labled output script-wise here. Will not be commited. It's local.
+Don't commit results, ok?
+
 # dependencies
 
 You will need the following:
