@@ -16,6 +16,20 @@ assuming that you run your python interpreter from the root directory.
 The actual scripts to achieve defined steps. Don't cd here,
 call `run scripts/run_XXX.py` from the root directory.
 
+Please follow the following convention:
+
+For computing stuff do: `run_{step}_{aspect}_{subaspect}_{subsubaspect}.py`
+
+For plotting stuff do: `run_step_aspect_subaspect_subsubaspect.py`
+
+Examples:
+
+`run_preprocessing_get-filtered-data.py`
+`run_preprocessing_compute-ica.py`
+`run_main_inverse_compute-1of.py`
+`plot_main_inverse_1of-grand-average.py`
+`...`
+
 #### config file
 
 The config.py file has it. The variables and parameters, but also a command
