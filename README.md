@@ -29,6 +29,8 @@ For computing stuff do: `run_{step}_{aspect}_{subaspect}_{subsubaspect}.py`
 
 For plotting stuff do: `run_step_aspect_subaspect_subsubaspect.py`
 
+For bash shell / config stuff do: `make_{whatever}.py`
+
 Examples:
 
 `run_preprocessing_get-filtered-data.py`
@@ -76,4 +78,3 @@ You will need the following:
 
 - current mne master branch
 - [The meeg_preprocessing package](https://github.com/dengemann/meeg-preprocessing/)
-
