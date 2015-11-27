@@ -81,3 +81,102 @@ subject_map = {
 subjects = list()
 for v in subject_map.values():
     subjects.extend(v)
+
+subjects_to_group = dict()
+for group, subs in subject_map.items():
+    for sub in subs:
+        subjects_to_group[sub] = group
+
+
+###############################################################################
+# FILE templates and variables
+
+data_path = 'data'
+recordings_path = data_path + '/' + 'MEG'
+er_path = data_path + '/' + 'MEG-ER'
+anatomy_path = data_path + '/' + 'subjects'
+
+sss_raw_name_tmp = '{group}_res{run}_raw_trans_sss.fif'
+
+
+# ICA ################################################################
+use_ica = False
+n_components = 0.99
+n_max_ecg = 4
+n_max_eog = 2
+ica_reject = dict(grad=4000e-13, mag=5.5e-12)
+ica_decim = 4
+max_ecg_epochs = 300
+ica_meg_combined = True
+
+######################################################################
+# Inverse
+
+snr = 1
+inverse_method = 'MNE'
+
+######################################################################
+# Report
+scale = 1.5
+
+
+######################################################################
+# Frequencies
+# HCP
+# delta
+# theta
+# alpha
+# beta low beta high gamma low gamma mid gamma high wide band
+# 1.5-4 4-8 8-15 15-26 26-35 35-50 50-76 76-120 1.5-150
+
+frequency_windows = [
+    ('delta', (1.5, 4.)),
+    ('theta', (4., 8.)),
+    ('alpha', (8., 15.)),
+    ('beta-low', (15., 26.)),
+    ('beta-high', (26., 35.)),
+    ('gamma-low', (35., 50.)),
+    ('gamma-mid', (50., 76.)),
+    ('gamma-high', (76., 120.)),
+]
+
+# as steep as possible
+filter_orders = {
+    'delta': (6, 7),
+    'theta': (6, 7),
+    'alpha': (7, 8),
+    'beta-low': (9, 9),
+    'beta-high': (9, 11),
+    'gamma-low': (9, 12),
+    'gamma-mid': (11, 14),
+    'gamma-high': (13, 14),
+}
+
+noise_cov_filter = list()
+for band, (l_freq, h_freq) in frequency_windows:
+    filter_params = list()
+    if band == 'delta':
+        filter_params += [
+            {'l_freq': None, 'h_freq': h_freq, 'method': 'iir',
+             'iir_params': {'ftype': 'butter',
+                            'order': filter_orders[band][0]}}]
+    else:
+        filter_params += [
+            {'l_freq': None, 'h_freq': h_freq, 'method': 'iir',
+             'iir_params': {'ftype': 'butter',
+                            'order': filter_orders[band][0]}},
+            {'l_freq': l_freq, 'h_freq': None, 'method': 'iir',
+             'iir_params': {'ftype': 'butter',
+                            'order': filter_orders[band][1]}}]
+    noise_cov_filter.append((band, filter_params))
+
+######################################################################
+# stats
+
+# stat_method = ['ranksums', 'tfce', 'cluster']
+# stat_method = ['ranksums', 'tfce']
+stat_method = ['tfce']
+
+# Performance ########################################################
+
+mkl_max_threads = 2

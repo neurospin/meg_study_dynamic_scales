@@ -3,6 +3,7 @@
 
 import numpy as np
 
+
 def compute_corr(x, y):
     """Correlate 2 matrices along last axis"""
     xm = x - x.mean(axis=-1, keepdims=True)
