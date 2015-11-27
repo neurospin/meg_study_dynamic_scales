@@ -14,6 +14,9 @@ meg_dir = op.join(dest_path, 'data', 'MEG')
 subjects_dir = op.join(dest_path, 'data', 'subjects')
 meg_er_dir = op.join(dest_path, 'data', 'MEG-ER')
 
+#
+# MEG
+#
 
 orig_subjects = list()
 for group in ['AV', 'AVr', 'V']:
@@ -45,13 +48,54 @@ subjects_mapping = {k: [s[-1] for s in v] for k, v in
                             key=lambda x: x[0][:-1].split('/')[-3])}
 # print subjects_mapping
 
-# put this in the config
+#
+# empty room
+#
+
 orig_empty_room = glob.glob(op.join(orig_er_path, '*'))
 
 subject_to_er = {k: k.split('-')[-1] for k in new_names}
+er_to_subject = {v: k for k, v in subject_to_er.items()}
+er_map = dict()
+for orig in orig_empty_room:
+    key = orig.split('/')[-1]
+    if key in er_to_subject:
+        er_map[orig] = op.join(meg_er_dir,  er_to_subject[key])
 
-er_map = {k.split('/')[-1]: k for k in orig_empty_room}
 
-for sub, er in subject_to_er.items():
-    print 'empty room %s for %s and %s' % (
-        {True: 'ok', False: 'NOT OK'}[er in er_map], sub, er)
+for orig, dest in er_map.items():
+    if not op.islink(dest):
+        print 'linking %s ->\n %s' % (orig, dest)
+        os.symlink(orig, dest)
+    else:
+        print('doing nothing')
+
+#
+# anatomy
+#
+
+orig_subjects_folder = glob.glob(op.join(
+    base_path, 'Dynacomp_Ciuciu_2011', 'yousra/subjects/*'))
+
+subjects_orgig_new_map = dict()
+new_names_old_format = [''.join(n.split('-')[0].split('_')) for n in new_names]
+for f in orig_subjects_folder:
+    name = op.split(f)[-1]
+    key = None
+    if 'landmark' in name:
+        name = name.replace('_landmark',  '')
+        if name in new_names_old_format:
+            index = new_names_old_format.index(name)
+            key = op.join(subjects_dir, new_names[index])
+
+    if key is None:
+        key = op.join(subjects_dir, name)
+    subjects_orgig_new_map[f] = key
+
+
+for orig, dest in subjects_orgig_new_map.items():
+    if not op.islink(dest):
+        print 'linking %s ->\n %s' % (orig, dest)
+        os.symlink(orig, dest)
+    else:
+        print('doing nothing')
