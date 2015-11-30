@@ -58,7 +58,9 @@ for subject in subjects:
     # get picks and iterate over channels
     for picks, ch_type in get_data_picks(raw, meg_combined=ica_meg_combined):
         ica, _ = compute_ica(raw, picks=picks,
-                             subject=subject, n_components=n_components,
+                             subject='%s (%s)' % (
+                                 subject, subjects_to_group[subject]),
+                             n_components=n_components,
                              n_max_ecg=n_max_ecg, n_max_eog=n_max_eog,
                              reject=ica_reject,
                              decim=1, report=report)
