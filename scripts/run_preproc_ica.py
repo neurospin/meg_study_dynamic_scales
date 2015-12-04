@@ -11,6 +11,8 @@ diagnostic plots of the preprocessing steps.
 
 import os.path as op
 import glob
+import pandas as pd
+
 from meeg_preprocessing import compute_ica
 from meeg_preprocessing.utils import (
     get_data_picks, setup_provenance, handle_mkl)
@@ -44,6 +46,7 @@ handle_mkl(max_threads=mkl_max_threads)
 report, run_id, results_dir, logger = setup_provenance(
     script=locals().get('__file__', op.curdir), results_dir='results')
 
+ica_infos = list()
 for subject in subjects:
     report = mne.report.Report(title=subject)
 
@@ -56,6 +59,8 @@ for subject in subjects:
     lib.decimate_raw(raw, decim=ica_decim)
 
     # get picks and iterate over channels
+    artifact_stats = dict()
+    ica_info = dict()
     for picks, ch_type in get_data_picks(raw, meg_combined=ica_meg_combined):
         ica, _ = compute_ica(raw, picks=picks,
                              subject='%s (%s)' % (
@@ -63,10 +68,29 @@ for subject in subjects:
                              n_components=n_components,
                              n_max_ecg=n_max_ecg, n_max_eog=n_max_eog,
                              reject=ica_reject,
+                             random_state=42,
+                             artifact_stats=artifact_stats,
                              decim=1, report=report)
-        ica.save('{}-ica.fif'.format(ch_type))
-
+        ica.save(
+            op.join(
+                results_dir, run_id, '{}-{}-ica.fif'.format(subject, ch_type)))
+        labels = getattr(ica, 'labels_', 0)
+        if 'ecg' not in labels:
+            labels['ecg'] = []
+        if 'eog' not in labels:
+            labels['ecg'] = []
+        ica_info.update(
+            {'%s_n_components' % ch_type: ica.n_components_,
+             '%s_n_components_ecg' % ch_type: len(labels['ecg']) if labels
+             else labels,
+             '%s_n_components_eog' % ch_type: len(labels['eog']) if labels
+             else labels})
+    ica_info.update(artifact_stats)
+    ica_infos.append(ica_info)
     report.save(  # save in automatically generated folder
         op.join(results_dir, run_id,
                 'preprocessing-report-{}.html'.format(subject)),
         open_browser=True, overwrite=True)
+
+ica_df = pd.DataFrame(ica_infos)
+ica_df.to_csv(op.join(results_dir, run_id, 'ica_info.csv'))

@@ -101,7 +101,7 @@ sss_raw_name_tmp = '{group}_res{run}_raw_trans_sss.fif'
 
 # ICA ################################################################
 use_ica = False
-n_components = 0.99
+n_components = 'rank'
 n_max_ecg = 4
 n_max_eog = 2
 ica_reject = dict(grad=4000e-13, mag=5.5e-12)
