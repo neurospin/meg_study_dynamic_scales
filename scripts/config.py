@@ -1,3 +1,4 @@
+import os.path as op
 from argparse import ArgumentParser
 
 default_args = dict(
@@ -99,6 +100,11 @@ anatomy_path = data_path + '/' + 'subjects'
 sss_raw_name_tmp = '{group}_res{run}_raw_trans_sss.fif'
 
 
+## inverse
+
+noise_cov_fname = 'empty_sss-cov.fif'
+fwd_fname = 'forward-oct-6.fif'
+
 # ICA ################################################################
 use_ica = False
 n_components = 'rank'
@@ -108,6 +114,13 @@ ica_reject = dict(grad=4000e-13, mag=5.5e-12)
 ica_decim = 4
 max_ecg_epochs = 300
 ica_meg_combined = True
+
+ica_fname_tmp = '{subject}-{ch_type}-ica.fif'
+
+current_ica_solution_path = op.join(
+    'results',
+    'run_preproc_ica',
+    'current-2015-12-02_12-26-31')
 
 ######################################################################
 # Inverse

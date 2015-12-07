@@ -17,6 +17,10 @@ from meeg_preprocessing import compute_ica
 from meeg_preprocessing.utils import (
     get_data_picks, setup_provenance, handle_mkl)
 
+from mne.minimum_norm import make_inverse_operator
+from mne.minimum_norm import apply_inverse_epochs
+from mne.minimum_norm import compute_source_psd_epochs
+
 
 import library as lib
 import mne
