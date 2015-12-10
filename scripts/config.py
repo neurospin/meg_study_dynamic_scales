@@ -142,6 +142,10 @@ scale = 1.5
 # beta low beta high gamma low gamma mid gamma high wide band
 # 1.5-4 4-8 8-15 15-26 26-35 35-50 50-76 76-120 1.5-150
 
+scale_free_windows = [
+    ('low', (0.1, 2))
+]
+
 frequency_windows = [
     ('delta', (1.5, 4.)),
     ('theta', (4., 8.)),
