@@ -48,22 +48,6 @@ report, run_id, results_dir, logger = setup_provenance(
     script=locals().get('__file__', op.curdir), results_dir='results')
 
 
-def make_overlapping_events(raw, event_id, start, stop, step, duration):
-    """Create overlapping events"""
-    events = [
-        mne.make_fixed_length_events(
-            raw, id=event_id, start=float(ii), duration=duration)
-        for ii in np.arange(start, stop, step)]
-    events = [e for e in events if len(e) > 0]
-    events = [e for e in events if
-              ((e[:, 0].min() - raw.first_samp) / raw.info['sfreq']) >=
-              duration]
-    events = np.concatenate(events, axis=0)
-    events = events[events[:, 0].argsort()]
-
-    return events
-
-ica_infos = list()
 for subject in subjects:
     report = mne.report.Report(title=subject)
 
@@ -86,13 +70,18 @@ for subject in subjects:
 
     invop = make_inverse_operator(raw.info, forward=fwd, noise_cov=noise_cov)
 
-    events = make_overlapping_events(
-        raw, 3000, 0, 70., step=15, duration=28.0)
+    # events = lib.event.make_overlapping_events(
+    #     raw, 3000, 0, 70., step=15, duration=28.0)
+    events = mne.make_fixed_length_events(raw, 3000, duration=28)
+
     epochs = mne.Epochs(raw, events=events, event_id=3000, tmin=0, tmax=28)
     picks = mne.pick_types(raw.info, meg='mag')
+
     X_psd = None
     alphas = list()
-    coefs = list()
+
+    X_coefs = list()
+    X_intercepts = list()
     regression = LinearRegression()
     sfmin, sfmax = dict(scale_free_windows)['low']
     ofmin, ofmax = dict(frequency_windows)['alpha']
@@ -104,9 +93,13 @@ for subject in subjects:
         if ii == 0:
             X_psd = np.empty_like(this_psd)
         sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
-        X_psd += this_psd
-        coefs.append(regression.fit(
-            freqs[sfmask, None], this_psd[:, sfmask].T).coef_[:, 0])
+        X_psd = np.nansum([X_psd, this_psd])
+
+        regression.fit(np.log10(freqs[sfmask, None]),
+                       np.log10(this_psd[:, sfmask].T))
+        X_coefs.append(regression.coef_[:, 0])
+        X_intercepts.append(regression.intercept_)
+
         alpha_mask = mne.utils._time_mask(freqs, ofmin, ofmax)
         alphas.append(
             dict(mean=np.mean(this_psd[:, alpha_mask], axis=1),
@@ -117,4 +110,34 @@ for subject in subjects:
                  gmean_norm=gmean(this_psd[:, alpha_mask] /
                                   this_psd[:, alpha_mask].sum(-1)[:, None],
                                   axis=1)))
-    break  # XXX continue here
+    X_psd /= (ii + 1)
+    # XXX continuen here
+    # X_coefs = np.array(X_coefs)
+    # X_alpha = np.array([a['mean'] for a in alphas])
+    # X_coefs = np.array(coefs)
+    # corr = lib.stats.compute_corr(X_alpha.T, X_coefs.T)
+    # corr = np.array([spearmanr(zscore(x), zscore(y)).correlation for x, y in zip(np.log10(X_alpha.T), X_coefs.T)])
+    # corr = mne.EvokedArray(
+    #     data=corr[:, None],
+    #     info=mne.io.pick.pick_info(epochs.info, picks),
+    #     tmin=0, nave=1)
+    #
+    #
+    # coefs = mne.EvokedArray(
+    #     data=np.median(X_coefs,0, keepdims=True).T,
+    #     info=mne.io.pick.pick_info(epochs.info, picks),
+    #     tmin=0, nave=1)
+    #
+    #
+    # alpha = mne.EvokedArray(
+    #     data=np.median(X_alpha, 0, keepdims=True).T,
+    #     info=mne.io.pick.pick_info(epochs.info, picks),
+    #     tmin=0, nave=1)
+    #
+    # alpha = mne.EvokedArray(
+    #     data=X_alpha.T,
+    #     info=mne.io.pick.pick_info(epochs.info, picks),
+    #     tmin=0, nave=1)
+    #
+    #
+    # break  # XXX continue here
