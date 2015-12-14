@@ -110,7 +110,20 @@ for subject in subjects:
                  gmean_norm=gmean(this_psd[:, alpha_mask] /
                                   this_psd[:, alpha_mask].sum(-1)[:, None],
                                   axis=1)))
+        fig = lib.viz.plot_loglog(this_psd, freqs, sfmask, coefs=X_coefs[-1],
+                                  intercepts=X_intercepts[-1])
+        report.add_figs_to_section(
+            fig, 'PSD #%i' % (ii + 1), 'single trial psds')
+
     X_psd /= (ii + 1)
+
+    fig = lib.viz.plot_loglog(X_psd, freqs, sfmask, coefs=X_coefs[-1],
+                              intercepts=X_intercepts[-1])
+    report.add_figs_to_section(
+        fig, 'PSD average' % (ii + 1), 'grand average psds')
+
+    report.save(op.join(results_dir, run_id, '%s-report.html' % subject))
+
     # XXX continuen here
     # X_coefs = np.array(X_coefs)
     # X_alpha = np.array([a['mean'] for a in alphas])
