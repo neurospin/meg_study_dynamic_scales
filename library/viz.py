@@ -9,6 +9,9 @@ def plot_loglog(psd, freqs, reg_fmask=None, coefs=None, intercepts=None,
     functions such as semilogx and loglog.
     """
     from matplotlib import pyplot as plt
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+
     if log == 'dec':
         my_log = np.log10
     elif log == 'ln':
@@ -22,17 +25,18 @@ def plot_loglog(psd, freqs, reg_fmask=None, coefs=None, intercepts=None,
     plt.plot(scaled_freqs, my_log(psd).T, color='black', alpha=0.1)
     plt.plot(scaled_freqs,
              np.median(my_log(psd), axis=0), color='blue', alpha=1,
-             linewidth=2)
+             linewidth=2, label='median PSD')
     plt.xlabel('Frequency [Hz]')
     plt.ylabel('log power')
     plt.xlim(scaled_freqs[0], scaled_freqs[-1])
 
     if coefs is not None and intercepts is not None and reg_fmask is not None:
-        slope_line = (np.median(coefs, 0) * scaled_freqs[reg_fmask] +
+        median_beta = np.median(coefs, 0)
+        slope_line = (median_beta * scaled_freqs[reg_fmask] +
                       np.median(intercepts, 0))
         plt.plot(scaled_freqs[reg_fmask], slope_line, color='red', linewidth=2,
-                 linestyle='--')
-
+                 linestyle='--', label=r'$\beta = %0.1f$' % median_beta)
+    plt.legend(loc='best')
     # Draw labels and map back to original scale
     fig.canvas.draw()
     ax = plt.gca()
