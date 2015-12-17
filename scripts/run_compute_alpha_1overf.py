@@ -18,6 +18,7 @@ from mne.minimum_norm import compute_source_psd_epochs
 from sklearn.linear_model import LinearRegression
 
 import library as lib
+from library.externals import h5io
 import mne
 from mne import io
 from mne.preprocessing import read_ica
@@ -72,7 +73,8 @@ for subject in subjects:
         noise_cov = mne.read_cov(
             op.join(recordings_path, subject, noise_cov_fname))
 
-        # invop = make_inverse_operator(raw.info, forward=fwd, noise_cov=noise_cov)
+        # invop = make_inverse_operator(raw.info, forward=fwd,
+        #                               noise_cov=noise_cov)
         #
         # events = lib.event.make_overlapping_events(
         #     raw, 3000, 0, 70., step=15, duration=28.0)
@@ -86,6 +88,7 @@ for subject in subjects:
 
         X_coefs = list()
         X_intercepts = list()
+        X_psds = list()
         regression = LinearRegression()
         sfmin, sfmax = dict(scale_free_windows)['low']
         ofmin, ofmax = dict(frequency_windows)['alpha']
@@ -95,11 +98,7 @@ for subject in subjects:
                                              sfreq=epochs.info['sfreq'],
                                              fmin=0.1,
                                              fmax=15, bandwidth=0.5)
-            if i_epoch == 0:
-                X_psd = np.empty_like(this_psd)
             sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
-
-            X_psd = np.nansum([X_psd, this_psd], axis=0)
 
             regression.fit(np.log10(freqs[sfmask, None]),
                            np.log10(this_psd[:, sfmask].T))
@@ -122,10 +121,11 @@ for subject in subjects:
             report.add_figs_to_section(
                 fig, 'PSD #%i' % (i_epoch + 1),
                 'single trial psds (run %i)' % i_run)
+            X_psds.append(this_psd)
 
-        X_psd /= (i_epoch + 1)
-
-        fig = lib.viz.plot_loglog(X_psd, freqs, sfmask, coefs=X_coefs[-1],
+        X_psds = np.array(X_psds)
+        fig = lib.viz.plot_loglog(np.nanmean(X_psds, axis=0),
+                                  freqs, sfmask, coefs=X_coefs[-1],
                                   intercepts=X_intercepts[-1])
         report.add_figs_to_section(
             fig, 'PSD average', 'grand average psds (run %i)' % i_run)
@@ -135,26 +135,24 @@ for subject in subjects:
         X_coefs = np.array(X_coefs)
         X_intercepts = np.array(X_intercepts)
 
-        lib.h5io.write(
+        h5io.write_hdf5(
             op.join(results_dir, run_id, '%s-results.hdf5' % subject),
             X_alphas,
             title='dyn/alphas/run%i' % i_run, overwrite='update')
-        lib.h5io.write(
+        h5io.write_hdf5(
             op.join(results_dir, run_id, '%s-results.hdf5' % subject),
             X_intercepts,
             title='dyn/intercpets/run%i' % i_run, overwrite='update')
-        lib.h5io.write(
+        h5io.write_hdf5(
             op.join(results_dir, run_id, '%s-results.hdf5' % subject),
             X_coefs,
             title='dyn/alphas/run%i' % i_run, overwrite='update')
-        lib.h5io.write(
+        h5io.write_hdf5(
             op.join(results_dir, run_id, '%s-results.hdf5' % subject),
-            X_psd,
+            X_psds,
             title='dyn/psd/run%i' % i_run, overwrite='update')
-        break
 
     report.save(op.join(results_dir, run_id, '%s-report.html' % subject))
-    break
     # XXX continuen here
     # X_coefs = np.array(X_coefs)
     # X_alpha = np.array([a['mean'] for a in alphas])
