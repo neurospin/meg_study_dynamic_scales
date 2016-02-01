@@ -1,3 +1,4 @@
+import os
 import os.path as op
 from argparse import ArgumentParser
 
@@ -99,6 +100,7 @@ anatomy_path = data_path + '/' + 'subjects'
 
 sss_raw_name_tmp = '{group}_res{run}_raw_trans_sss.fif'
 
+results_sensor = 'results/run_compute_alpha_1overf/current-2015-12-15_17-59-36'
 
 ## inverse
 

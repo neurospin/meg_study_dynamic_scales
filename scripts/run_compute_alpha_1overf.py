@@ -16,6 +16,7 @@ from mne.minimum_norm import apply_inverse_epochs
 from mne.minimum_norm import compute_source_psd_epochs
 
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import RANSACRegressor
 
 import library as lib
 from library.externals import h5io
@@ -98,6 +99,8 @@ for subject in subjects:
                                              sfreq=epochs.info['sfreq'],
                                              fmin=0.1,
                                              fmax=15, bandwidth=0.5)
+            import pdb; pdb.set_trace()
+
             sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
 
             regression.fit(np.log10(freqs[sfmask, None]),
@@ -151,6 +154,10 @@ for subject in subjects:
             op.join(results_dir, run_id, '%s-results.hdf5' % subject),
             X_psds,
             title='dyn/psd/run%i' % i_run, overwrite='update')
+    h5io.write_hdf5(
+        op.join(results_dir, run_id, '%s-results.hdf5' % subject),
+        X_psds,
+        title='dyn/freqs', overwrite='update')
 
     report.save(op.join(results_dir, run_id, '%s-report.html' % subject))
     # XXX continuen here
