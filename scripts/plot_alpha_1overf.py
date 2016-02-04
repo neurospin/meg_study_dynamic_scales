@@ -5,7 +5,7 @@ import os
 import os.path as op
 import pandas as pd
 import numpy as np
-from scipy.stats import gmean
+from scipy.stats import trim_mean
 
 from meeg_preprocessing.utils import (
     get_data_picks, setup_provenance, handle_mkl)
@@ -14,15 +14,13 @@ from mne.time_frequency import multitaper_psd
 from mne.minimum_norm import make_inverse_operator
 from mne.minimum_norm import apply_inverse_epochs
 from mne.minimum_norm import compute_source_psd_epochs
-
 from sklearn.linear_model import LinearRegression
-from sklearn.linear_model import RANSACRegressor
 
 import library as lib
 from library.externals import h5io
 import mne
 import config as cfg
-
+import matplotlib.pyplot as plt
 
 args = cfg.get_argparse().parse_known_args()[0]
 subjects = [args.subject] if args.subject is not None else cfg.subjects
@@ -36,39 +34,28 @@ report, run_id, results_dir, logger = setup_provenance(
 
 fnames = [c for c in os.listdir(cfg.results_sensor) if 'hdf5' in c]
 
-"""
-h5io.write_hdf5(
-    op.join(results_dir, run_id, '%s-results.hdf5' % subject),
-    X_alphas,
-    title='dyn/alphas/run%i' % i_run, overwrite='update')
-h5io.write_hdf5(
-    op.join(results_dir, run_id, '%s-results.hdf5' % subject),
-    X_intercepts,
-    title='dyn/intercpets/run%i' % i_run, overwrite='update')
-h5io.write_hdf5(
-    op.join(results_dir, run_id, '%s-results.hdf5' % subject),
-    X_coefs,
-    title='dyn/alphas/run%i' % i_run, overwrite='update')
-h5io.write_hdf5(
-    op.join(results_dir, run_id, '%s-results.hdf5' % subject),
-    X_psds,
-    title='dyn/psd/run%i' % i_run, overwrite='update')
+"""XXX repair saving frequencies
+for fname in fnames:
+    h5io.write_hdf5(op.join(cfg.results_sensor, fname),
+                    np.linspace(0.1, 15, 418), title='dyn/freqs',
+                    overwrite='update')
 """
 
-regressions = dict(
-    # robust=RANSACRegressor(LinearRegression()),
-    glm=LinearRegression()
-)
+lm = LinearRegression()
 
 sfmin, sfmax = dict(cfg.scale_free_windows)['low']
 ofmin, ofmax = dict(cfg.frequency_windows)['alpha']
 
+lout = mne.channels.read_layout('Vectorview-mag')
+info = mne.create_info(
+    lout.names, sfreq=1000, ch_types=['mag'] * len(lout.names))
 
+coefs_list = list()
+r2_list = list()
 for fname in fnames:
     subject = fname.replace('-results.hdf5', '')
     group = [k for k, v in cfg.subject_map.items() if subject in v][0]
     fname = op.join(cfg.results_sensor, fname)
-
     psds = list()
     for i_run in range(6):
         psds.append(
@@ -76,63 +63,67 @@ for fname in fnames:
     psds = np.concatenate(psds, axis=0)
     freqs = h5io.read_hdf5(fname, title='dyn/freqs')
 
-    X_coefs = dict(glm=list(), robust=list())
-    X_intercepts = dict(glm=list(), robust=list())
+    coefs, intercepts, msq, r2 = lib.stats.compute_log_linear_fit(
+        psds, freqs, sfmin, sfmax, lm)
 
-    for i_epoch, this_psd in enumerate(psds):
+    lm_props = [
+        (coefs, 'betas', coefs_list),
+        (r2, 'r2', r2_list),
+    ]
 
-        sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
-        for reg_kind, mod in regressions.items():
-            mod.fit(np.log10(freqs[sfmask, None]),
-                    np.log10(this_psd[:, sfmask].T))
-            X_coefs[reg_kind].append(mod.coef_[:, 0])
-            X_intercepts[reg_kind].append(mod.intercept_)
-            import pdb; pdb.set_trace()
+    for lm_prop, kind, my_list in lm_props:
+        lm_prop = lib.stats.lm_bcast(lm_prop, psds)
+        X_corr = lib.stats.compute_corr(lm_prop.T, np.log10(psds).T)
+        fig_lines = lib.viz.plot_loglog_corr(freqs, X_corr)
+        fig_lines.set_dpi(cfg.dpi)
+        plt.ylabel('correlation (%s)' % kind)
 
-        alpha_mask = mne.utils._time_mask(freqs, ofmin, ofmax)
-        # X_alphas.append(
-        #     dict(mean=np.mean(this_psd[:, alpha_mask], axis=1),
-        #          gmean=gmean(this_psd[:, alpha_mask], axis=1),
-        #          mean_norm=np.mean(
-        #              this_psd[:, alpha_mask] /
-        #              this_psd[:, alpha_mask].sum(-1)[:, None], axis=1),
-        #          gmean_norm=gmean(
-        #              this_psd[:, alpha_mask] /
-        #              this_psd[:, alpha_mask].sum(-1)[:, None], axis=1)))
-        # # fig = lib.viz.plot_loglog(this_psd, freqs, sfmask,
-        # #                           coefs=X_coefs[-1],
-        # #                           intercepts=X_intercepts[-1])
-        #
-        #
+        mne_coefs_corr = mne.EvokedArray(
+            data=X_corr.T, info=info, tmin=0, nave=1)
+        mne_coefs_corr.times = freqs
+        my_list.append(mne_coefs_corr)
 
-    # report.save(op.join(results_dir, run_id, '%s-report.html' % subject))
-    # XXX continuen here
-    # X_coefs = np.array(X_coefs)
-    # X_alpha = np.array([a['mean'] for a in alphas])
-    # X_coefs = np.array(coefs)
-    # corr = lib.stats.compute_corr(X_alpha.T, X_coefs.T)
-    # corr = np.array([spearmanr(zscore(x), zscore(y)).correlation for x, y in zip(np.log10(X_alpha.T), X_coefs.T)])
-    # corr = mne.EvokedArray(
-    #     data=corr[:, None],
-    #     info=mne.io.pick.pick_info(epochs.info, picks),
-    #     tmin=0, nave=1)
-    #
-    #
-    # coefs = mne.EvokedArray(
-    #     data=np.median(X_coefs,0, keepdims=True).T,
-    #     info=mne.io.pick.pick_info(epochs.info, picks),
-    #     tmin=0, nave=1)
-    #
-    #
-    # alpha = mne.EvokedArray(
-    #     data=np.median(X_alpha, 0, keepdims=True).T,
-    #     info=mne.io.pick.pick_info(epochs.info, picks),
-    #     tmin=0, nave=1)
-    #
-    # alpha = mne.EvokedArray(
-    #     data=X_alpha.T,
-    #     info=mne.io.pick.pick_info(epochs.info, picks),
-    #     tmin=0, nave=1)
-    #
-    # break  # XXX continue here
-    #
+        fig_topos = mne_coefs_corr.plot_topomap(
+            times=freqs[freqs >= 8][::20], ch_type='mag',
+            layout=lout, scale=1, cmap='RdYlBu_r', scale_time=1, unit='r',
+            time_format='%1d Hz', contours=0, vmin=-0.6, vmax=0.6)
+        fig_topos.set_dpi(cfg.dpi)
+
+        fig_image = plt.figure(dpi=cfg.dpi)
+        plt.imshow(
+            mne_coefs_corr.data[np.argsort(mne_coefs_corr.data.var(1))],
+            cmap='RdYlBu_r', vmin=-0.9, vmax=0.9, norm=None,
+            interpolation='nearest',
+            aspect=len(freqs) / float(len(mne_coefs_corr.data)))
+        cb = plt.colorbar()
+        cb.set_label('r')
+        plt.xticks(range(len(freqs))[50::100], freqs[50::100].astype(int))
+        plt.xlabel('Frequency [Hz]')
+        plt.ylabel('Channels [by variance]')
+
+        for fig, section in zip(
+            [fig_lines, fig_topos, fig_image],
+                ['parallel ' + kind, 'topos ' + kind, 'image ' + kind]):
+            report.add_figs_to_section(fig, subject, section=section)
+
+grand_ave = coefs_list[0].copy()
+grand_ave.data = trim_mean([c.data for c in coefs_list], 0.1, axis=0)
+
+fig_topos_ga = grand_ave.plot_topomap(
+    times=freqs[freqs >= 8][::20], ch_type='mag',
+    layout=lout, scale=1, cmap='RdYlBu_r', scale_time=1, unit='r',
+    time_format='%0.1f Hz', contours=0,
+    # vmin=-0.6, vmax=0.6
+)
+fig_topos_ga.set_dpi(cfg.dpi)
+
+fig_lines_ga = lib.viz.plot_loglog_corr(freqs, grand_ave.data.T)
+fig_lines_ga.set_dpi(cfg.dpi)
+plt.ylabel('correlation (%s)' % 'beta')
+
+for fig, section in zip(
+    [fig_lines_ga, fig_topos_ga],
+        ['parallel ' + kind, 'topos ' + kind]):
+    report.add_figs_to_section(fig, subject, section='grand_ave_coefs')
+
+report.save()

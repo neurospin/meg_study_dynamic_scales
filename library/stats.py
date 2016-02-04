@@ -2,6 +2,15 @@
 # License: BSD (3-clause)
 
 import numpy as np
+import mne
+
+from sklearn.metrics import r2_score
+from sklearn.metrics import mean_squared_error
+
+
+def lm_bcast(x, psds):
+    """broadcast linear model outputs for efficient correlation"""
+    return np.transpose((x * np.ones((psds.shape[-1], 1, 1))), [1, 2, 0])
 
 
 def compute_corr(x, y):
@@ -12,3 +21,30 @@ def compute_corr(x, y):
                     np.sum(ym * ym, axis=-1))
     r = np.sum(xm * ym, axis=-1) / r_den
     return r
+
+
+def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg):
+    sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
+    x = np.log10(freqs[sfmask, None])
+
+    coefs = list()
+    intercepts = list()
+    msq = list()
+    r2 = list()
+    for i_epoch, this_psd in enumerate(psds):
+
+        Y = np.log10(this_psd[:, sfmask].T)
+        reg.fit(x, Y)
+        pred = reg.predict(x)
+        msq.append(np.array(
+            [mean_squared_error(b, a) for a, b in zip(pred.T, Y.T)]))
+        r2.append(np.array(
+            [r2_score(b, a) for a, b in zip(pred.T, Y.T)]))
+        coefs.append(reg.coef_[:, 0])
+        intercepts.append(reg.intercept_)
+
+    coefs = np.array(coefs)
+    intercepts = np.array(intercepts)
+    msq = np.array(msq)
+    r2 = np.array(r2)
+    return coefs, intercepts, msq, r2
