@@ -52,6 +52,7 @@ info = mne.create_info(
 
 coefs_list = list()
 r2_list = list()
+psds_list = list()
 for fname in fnames:
     subject = fname.replace('-results.hdf5', '')
     group = [k for k, v in cfg.subject_map.items() if subject in v][0]
@@ -70,6 +71,20 @@ for fname in fnames:
         (coefs, 'betas', coefs_list),
         (r2, 'r2', r2_list),
     ]
+    if subject != 'ak_130184-130619':
+        continue
+
+    mne_ga_psds = mne.EvokedArray(
+        data=10 * np.log10(psds[0]), info=info, tmin=0, nave=1)
+    mne_ga_psds.times = freqs
+    fig_psds_topos = mne_ga_psds.plot_topomap(
+        times=freqs[freqs >= 8][::20], ch_type='mag',
+        layout=lout, scale=1, cmap='magma', scale_time=1, unit='dB',
+        time_format='%0.1f Hz', contours=0, vmin=np.min, vmax=np.max)
+
+    psds_list.append(mne_ga_psds)
+    report.add_figs_to_section(
+        fig_psds_topos, subject, section='alpha-power')
 
     for lm_prop, kind, my_list in lm_props:
         lm_prop = lib.stats.lm_bcast(lm_prop, psds)
