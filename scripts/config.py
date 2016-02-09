@@ -102,12 +102,23 @@ sss_raw_name_tmp = '{group}_res{run}_raw_trans_sss.fif'
 
 results_sensor = 'results/run_compute_alpha_1overf/current-2015-12-15_17-59-36'
 
-## inverse
+# inverse
 
 noise_cov_fname = 'empty_sss-cov.fif'
 fwd_fname = 'forward-oct-6.fif'
 
-# ICA ################################################################
+
+###############################################################################
+# resampling
+
+f_resample = 250.
+
+###############################################################################
+# Segmentation
+epochs_tmin = 0.0
+epochs_tmax = 28.0
+
+# ICA #########################################################################
 use_ica = False
 n_components = 'rank'
 n_max_ecg = 4

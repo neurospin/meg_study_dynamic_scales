@@ -38,7 +38,7 @@ for subject in subjects:
     written_fields = list()
     for i_run, fname in enumerate(raw_fnames):
         raw = io.Raw(fname, preload=True)
-        raw.resample(250., n_jobs=4)
+        raw.resample(cfg.f_resample, n_jobs=4)
         for picks, ch_type in get_data_picks(
                 raw, meg_combined=cfg.ica_meg_combined):
             this_ica_fname = op.join(
@@ -51,9 +51,11 @@ for subject in subjects:
         noise_cov = mne.read_cov(
             op.join(cfg.recordings_path, subject, cfg.noise_cov_fname))
 
-        events = mne.make_fixed_length_events(raw, 3000, duration=28)
+        events = mne.make_fixed_length_events(
+            raw, 3000, duration=cfg.epochs_tmax)
 
-        epochs = mne.Epochs(raw, events=events, event_id=3000, tmin=0, tmax=28)
+        epochs = mne.Epochs(raw, events=events, event_id=3000,
+                            tmin=cfg.epochs_tmin, tmax=cfg.epochs_tmax)
         picks = mne.pick_types(raw.info, meg=True)
 
         X_psd = None
