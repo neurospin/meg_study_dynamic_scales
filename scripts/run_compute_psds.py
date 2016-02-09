@@ -38,7 +38,7 @@ for subject in subjects:
     written_fields = list()
     for i_run, fname in enumerate(raw_fnames):
         raw = io.Raw(fname, preload=True)
-        raw.resample(cfg.f_resample, n_jobs=4)
+        raw.resample(cfg.f_resample, n_jobs=8)
         for picks, ch_type in get_data_picks(
                 raw, meg_combined=cfg.ica_meg_combined):
             this_ica_fname = op.join(
@@ -58,9 +58,7 @@ for subject in subjects:
                             tmin=cfg.epochs_tmin, tmax=cfg.epochs_tmax)
         picks = mne.pick_types(raw.info, meg=True)
 
-        X_psd = None
         X_psds = list()
-
         for i_epoch, epoch in enumerate(epochs):
             this_psd, freqs = multitaper_psd(epoch[picks],
                                              sfreq=epochs.info['sfreq'],
