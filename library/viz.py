@@ -1,4 +1,32 @@
 import numpy as np
+from .externals import mne_viz
+
+
+def plot_joint_loglog(evoked, freqs, lout, topo_freqs, figsize=(8.0, 4.2),
+                      topo_size=1):
+    evoked.times = np.log10(freqs) / 1e3
+    fig = mne_viz.plot_evoked_joint(
+        evoked,
+        times=topo_freqs,
+        ts_args=dict(scalings=dict(mag=1.0, grad=1.0),
+                     units=dict(mag='dB', grad='dB')),
+        topomap_args=dict(ch_type='mag', layout=lout, scale=1,
+                          cmap='magma',
+                          scale_time=1000, unit='dB', time_format='',
+                          contours=0, vmin=np.min, vmax=np.max, size=1.5),
+        figsize=figsize)
+
+    ax = fig.axes[0]
+    fig.axes[1].set_visible(False)
+    [(l.set_alpha(0.1), l.set_color('black')) for ii, l in
+     enumerate(ax.get_lines()) if ii < evoked.info['nchan']]
+    ax.plot(
+        evoked.times * 1e3, evoked.data.mean(0).T, color='b')
+    ax.set_xlabel('Frequency [Hz]')
+    ax.set_xticks(np.log10([0.1, 1, 10, 100]))
+    ax.set_xticklabels([0.1, 1, 10, 100])
+    fig.canvas.draw()
+    return fig
 
 
 def plot_loglog(psd, freqs, reg_fmask=None, coefs=None, intercepts=None,
@@ -9,7 +37,7 @@ def plot_loglog(psd, freqs, reg_fmask=None, coefs=None, intercepts=None,
     functions such as semilogx and loglog.
     """
     from matplotlib import pyplot as plt
-    plt.rc('text', usetex=True)
+    plt.rc('text', usetex=False)
     plt.rc('font', family='serif')
 
     my_log = _get_my_log(log)
@@ -32,7 +60,7 @@ def plot_loglog(psd, freqs, reg_fmask=None, coefs=None, intercepts=None,
     plt.legend(loc='best')
 
     # Draw labels and map back to original scale
-    _cleanup_logscale(fig, scaled_freqs, freqs, xticks)
+    _cleanup_logscale(plt.gca(), scaled_freqs, freqs, xticks)
     return fig
 
 
@@ -55,9 +83,9 @@ def plot_loglog_corr(freqs, corr, log='dec', xticks=(0.1, 1, 10)):
     plt.xlabel('Frequency [Hz]')
     plt.ylabel('correlation')
     plt.xlim(scaled_freqs[0], scaled_freqs[-1])
+    _cleanup_logscale(plt.gca(), scaled_freqs, freqs, xticks)
     fig.canvas.draw()
     # # Draw labels and map back to original scale
-    _cleanup_logscale(fig, scaled_freqs, freqs, xticks)
     return fig
 
 
@@ -73,9 +101,8 @@ def _get_my_log(log):
     return my_log
 
 
-def _cleanup_logscale(fig, scaled_freqs, freqs, xticks):
+def _cleanup_logscale(ax, scaled_freqs, freqs, xticks):
     """helper"""
-    ax = fig.gca()
     new_ticklabels = list()
     new_pos = list()
     for pos in xticks:
@@ -87,4 +114,3 @@ def _cleanup_logscale(fig, scaled_freqs, freqs, xticks):
         new_pos.append(scaled_pos)
     ax.set_xticks(new_pos)
     ax.set_xticklabels(new_ticklabels)
-    fig.canvas.draw()
