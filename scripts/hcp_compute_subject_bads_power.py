@@ -8,10 +8,8 @@ import time
 from copy import deepcopy
 
 
-import matplotlib
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from mne.time_frequency import psd_multitaper
 
 from meeg_preprocessing.utils import (
@@ -48,6 +46,9 @@ def mad_detect(y, thresh=3.5):
 def compute_power_sepctra_and_bads(subject, run_index, recordings_path,
                                    fmin, fmax,
                                    hcp_path, report, n_jobs=1):
+    import matplotlib
+    matplolib.use('Agg')
+    import matplotlib.pyplot as plt
     annots = hcp.io.read_annot_hcp(
         subject, hcp_path=hcp_path, data_type='rest',
         run_index=run_index)
