@@ -16,7 +16,6 @@ from meeg_preprocessing.utils import (
     setup_provenance)
 
 import config as cfg
-import library as lib
 import mne
 from mne.report import Report
 import hcp
