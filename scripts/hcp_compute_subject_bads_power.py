@@ -15,6 +15,7 @@ from mne.time_frequency import psd_multitaper
 from meeg_preprocessing.utils import (
     setup_provenance)
 
+import library as lib
 import config as cfg
 import mne
 from mne.report import Report
@@ -177,9 +178,6 @@ if __name__ == '__main__':
     if not op.exists(storage_dir):
         os.makedirs(storage_dir)
 
-    # configure logging + provenance tracking magic
-    report, run_id, results_dir, logger = setup_provenance(
-        script=__file__, results_dir=op.join(recordings_path, subject))
 
     s3_meg_files = hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=('rest',), processing=('unprocessed'),
@@ -200,6 +198,10 @@ if __name__ == '__main__':
         elapsed_time = time.time() - start_time
         print('Elapsed time downloading from s3 {}'.format(
             time.strftime('%H:%M:%S', time.gmtime(elapsed_time))))
+
+    # configure logging + provenance tracking magic
+    report, run_id, results_dir, logger = setup_provenance(
+        script=__file__, results_dir=op.join(recordings_path, subject))
 
     written_files = list()
     results = list()
