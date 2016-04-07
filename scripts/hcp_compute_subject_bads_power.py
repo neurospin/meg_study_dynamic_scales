@@ -183,9 +183,9 @@ if __name__ == '__main__':
 
     hcp_path = op.join(storage_dir, 'HCP')
     recordings_path = op.join(storage_dir, 'hcp-meg')
-
-    if not op.exists(storage_dir):
-        os.makedirs(storage_dir)
+    for this_dir in [storage_dir, hcp_path, recordings_path]:
+        if not op.exists(this_dir):
+            os.makedirs(this_dir)
 
     s3_meg_files = hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=('rest',), processing=('unprocessed'),
