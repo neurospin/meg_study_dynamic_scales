@@ -47,7 +47,7 @@ def compute_power_sepctra_and_bads(subject, run_index, recordings_path,
                                    fmin, fmax,
                                    hcp_path, report, n_jobs=1):
     import matplotlib
-    matplolib.use('Agg')
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     annots = hcp.io.read_annot_hcp(
         subject, hcp_path=hcp_path, data_type='rest',
@@ -86,6 +86,15 @@ def compute_power_sepctra_and_bads(subject, run_index, recordings_path,
     X_psds /= (ii + 1)
     X_psds = X_psds[0]
     written_files = list()
+
+    mne_psds = mne.EvokedArray(
+        data=X_psds, info=deepcopy(epochs.info), tmin=0, nave=1)
+    hcp.preprocessing.transform_sensors_to_mne(mne_psds)
+
+    written_files.append(
+        op.join(recordings_path, subject, 'psds-bads-%i-%i-ave.fif' % (
+            int(fmin), int(fmax))))
+    mne_psds.save(written_files[-1])
 
     med_power = np.median(np.log10(X_psds), 1)
     outlier_mask, left_mad, right_mad = mad_detect(med_power)
@@ -132,7 +141,7 @@ def compute_power_sepctra_and_bads(subject, run_index, recordings_path,
     results = {'subject': subject, 'run': run_index,
                'labels': outlier_label[outlier_mask]}
 
-    fig_log = lib.viz.plot_loglog(X_psds, freqs[(freqs >= 5) & (freqs <= 35)])
+    fig_log = lib.viz.plot_loglog(X_psds, freqs[(freqs >= 5) & (freqs <= 3)])
     fig_log.set_dpi(cfg.dpi)
     if report is not None:
         report.add_figs_to_section(
@@ -177,7 +186,6 @@ if __name__ == '__main__':
 
     if not op.exists(storage_dir):
         os.makedirs(storage_dir)
-
 
     s3_meg_files = hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=('rest',), processing=('unprocessed'),
