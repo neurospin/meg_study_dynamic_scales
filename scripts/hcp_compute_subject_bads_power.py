@@ -132,7 +132,7 @@ def compute_power_sepctra_and_bads(subject, run_index, recordings_path,
     results = {'subject': subject, 'run': run_index,
                'labels': outlier_label[outlier_mask]}
 
-    fig_log = lib.viz.plot_loglog(X_psds, freqs[(freqs >= 5) & (freqs <= 50)])
+    fig_log = lib.viz.plot_loglog(X_psds, freqs[(freqs >= 5) & (freqs <= 35)])
     fig_log.set_dpi(cfg.dpi)
     if report is not None:
         report.add_figs_to_section(

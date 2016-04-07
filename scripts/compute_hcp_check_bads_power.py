@@ -89,12 +89,11 @@ for subject, run_idx in my_iter:
 
     X_psds = 0.0
     freq = 0
-    import pdb; pdb.set_trace()
     for i_epoch in np.arange(len(epochs.events)):
         print i_epoch
         this_psd, freqs = psd_multitaper(epochs[i_epoch],
                                          fmin=5,
-                                         fmax=50, bandwidth=4,
+                                         fmax=35, bandwidth=4,
                                          n_jobs=1)
         X_psds += this_psd[0]
     X_psds /= i_epoch
@@ -113,7 +112,7 @@ for subject, run_idx in my_iter:
     plt.ylim(med_power.min() - 1, med_power.min() + 2)
     for inds in np.where(outlier_mask)[0]:
         plt.plot(
-            plot_range[inds], 
+            plot_range[inds],
             med_power[inds], linestyle='None', marker='o', color='red',
             label=outlier_label[inds])
     plt.ylabel('median log10(PSD)')
