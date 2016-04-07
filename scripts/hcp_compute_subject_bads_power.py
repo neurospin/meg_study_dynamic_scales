@@ -190,6 +190,9 @@ if __name__ == '__main__':
     s3_meg_files = hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=('rest',), processing=('unprocessed'),
         run_inds=(0, 1, 2))
+    s3_meg_files += hcp.io.file_mapping.get_s3_keys_meg(
+        subject, data_types=('rest',), processing=('preprocessed'),
+        outputs=('bads', 'ica'), run_inds=(0, 1, 2))
 
     if args.s3 is True:
         start_time = time.time()
