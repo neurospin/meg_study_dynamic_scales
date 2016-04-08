@@ -2,6 +2,7 @@
 # License: BSD (3-clause)
 
 import os
+import sys
 import os.path as op
 from argparse import ArgumentParser
 import time
@@ -12,10 +13,8 @@ import numpy as np
 import pandas as pd
 from mne.time_frequency import psd_multitaper
 
-from meeg_preprocessing.utils import (
-    setup_provenance)
+from meeg_preprocessing.utils import setup_provenance
 
-import library as lib
 import config as cfg
 import mne
 from mne.report import Report
@@ -25,6 +24,8 @@ import mkl
 import aws_hacks
 
 mkl.set_num_threads(1)
+sys.path.append(op.join(op.abspath('.')))
+import library as lib
 
 
 def mad_detect(y, thresh=3.5):
@@ -141,7 +142,8 @@ def compute_power_sepctra_and_bads(subject, run_index, recordings_path,
     results = {'subject': subject, 'run': run_index,
                'labels': outlier_label[outlier_mask]}
 
-    fig_log = lib.viz.plot_loglog(X_psds, freqs[(freqs >= 5) & (freqs <= 3)])
+    fig_log = lib.viz.plot_loglog(
+        X_psds, freqs[(freqs >= fmin) & (freqs <= fmax)])
     fig_log.set_dpi(cfg.dpi)
     if report is not None:
         report.add_figs_to_section(
@@ -176,10 +178,13 @@ if __name__ == '__main__':
                         help='the number of jobs to run in parallel')
     parser.add_argument('--s3', action='store_true',
                         help='skip s3')
-
+    parser.add_argument('--run_id', metavar='run_id', type=str,
+                        nargs='?', default=None,
+                        help='the run_id')
     args = parser.parse_args()
     subject = args.subject
     storage_dir = args.storage_dir
+    run_id = args.run_id
 
     hcp_path = op.join(storage_dir, 'HCP')
     recordings_path = op.join(storage_dir, 'hcp-meg')
@@ -212,7 +217,8 @@ if __name__ == '__main__':
 
     # configure logging + provenance tracking magic
     report, run_id, results_dir, logger = setup_provenance(
-        script=__file__, results_dir=op.join(recordings_path, subject))
+        script=__file__, results_dir=op.join(recordings_path, subject),
+        run_id=run_id)
 
     written_files = list()
     results = list()
@@ -221,7 +227,7 @@ if __name__ == '__main__':
         files, this_result = compute_power_sepctra_and_bads(
             subject=subject, run_index=run_index,
             recordings_path=recordings_path,
-            fmin=5, fmax=50, hcp_path=hcp_path,
+            fmin=5, fmax=35, hcp_path=hcp_path,
             report=report, n_jobs=1)
         written_files.extend(files)
         results.append(this_result)
@@ -255,10 +261,10 @@ if __name__ == '__main__':
         print('Elapsed time uploading to s3 {}'.format(
             time.strftime('%H:%M:%S', time.gmtime(elapsed_time))))
 
-    if args.keep_files and args.s3 is True:
+    if not args.keep_files and args.s3 is True:
         my_files_to_clean = list()
         my_files_to_clean += written_files
-        my_files_to_clean += [op.join(recordings_path,
+        my_files_to_clean += [op.join(hcp_path,
                                       f.replace('HCP_900/', ''))
                               for f in s3_meg_files]
         for fname in my_files_to_clean:

@@ -72,10 +72,10 @@ def run_parallel(script, args, par_args, par_target):
     """Run GNU parallel"""
     cmd = 'parallel -j {}'.format(n_par)
     cmd += ' --progress'
-    cmd += ' "{interpreter} {script} {args} --{target} '.format(
+    cmd += ' {interpreter} {script} {args} --{target} '.format(
         interpreter=interpreter,
         script=script, args=' '.join(args), target=par_target)
-    cmd += "'{}'; sleep 2" + '"'
+    cmd += '{}\n; sleep 30;'
     cmd += ' {par_sep} {par_args}'.format(
         par_sep=par_sep, par_args=' '.join(par_args))
     command = shlex.split(cmd)
