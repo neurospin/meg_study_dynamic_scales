@@ -188,8 +188,8 @@ if __name__ == '__main__':
             os.makedirs(this_dir)
 
     s3_meg_files = hcp.io.file_mapping.get_s3_keys_meg(
-        subject, data_types=('rest',), processing=('unprocessed'),
-        run_inds=(0, 1, 2))
+        subject, data_types=('rest', 'noise_empty_room'),
+        processing=('unprocessed'), run_inds=(0, 1, 2))
     s3_meg_files += hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=('rest',), processing=('preprocessed'),
         outputs=('bads', 'ica'), run_inds=(0, 1, 2))
