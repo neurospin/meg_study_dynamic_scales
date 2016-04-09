@@ -1,0 +1,149 @@
+import os.path as op
+from copy import deepcopy
+
+import numpy as np
+import pandas as pd
+
+import mne
+from mne.time_frequency import psd_multitaper
+import hcp
+
+from .hcp_utils import hcp_preprocess_ssp_ica
+from .utils import mad_detect
+from .viz import plot_loglog
+
+
+def _psd_average_sensor_space(
+        subject, run_index, recordings_path, fmin, fmax,
+        hcp_path, n_ssp, decim,  mt_bandwidth, duration, n_jobs):
+
+    raw = hcp_preprocess_ssp_ica(
+        subject=subject, run_index=run_index, recordings_path=recordings_path,
+        hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs, n_ssp=n_ssp)
+
+    events = mne.make_fixed_length_events(raw, 3000, duration=duration)
+    picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
+    epochs = mne.Epochs(
+        raw, picks=picks, events=events, event_id=3000, tmin=0, tmax=duration,
+        detrend=1,
+        reject=dict(mag=5e-12), preload=True, decim=decim, proj=True)
+
+    X_psds = 0.0
+    for ii in range(len(epochs.events)):
+        psds, freqs = psd_multitaper(
+            epochs[ii], fmin=fmin, fmax=fmax, bandwidth=mt_bandwidth, n_jobs=1)
+        X_psds += psds
+    X_psds /= (ii + 1)
+    X_psds = X_psds[0]
+    mne_psds = mne.EvokedArray(
+        data=X_psds, info=deepcopy(epochs.info), tmin=0, nave=1)
+    hcp.preprocessing.transform_sensors_to_mne(mne_psds)
+    return mne_psds, freqs, epochs.info
+
+
+def compute_power_sepctra(
+        subject, run_index, recordings_path, fmin=None, fmax=200,
+        hcp_path=op.curdir, n_ssp=12, decim=1, mt_bandwidth=4, duration=30,
+        report=None, dpi=300, n_jobs=1):
+
+    mne_psds, freqs, info = _psd_average_sensor_space(
+        subject=subject, run_index=run_index,
+        recordings_path=recordings_path, fmin=fmin, fmax=fmax,
+        hcp_path=hcp_path, n_ssp=n_ssp, decim=decim, mt_bandwidth=mt_bandwidth,
+        duration=duration, n_jobs=n_jobs)
+
+    written_files = list()
+    written_files.append(
+        op.join(recordings_path, subject, 'psds-ave-%i-%i-ave.fif' % (
+            int(fmin), int(fmax))))
+    mne_psds.save(written_files[-1])
+
+
+def compute_power_sepctra_and_bads(
+        subject, recordings_path, fmin=None, fmax=200,
+        hcp_path=op.curdir, n_ssp=12, decim=16,  mt_bandwidth=4, duration=1,
+        report=None, dpi=300, n_jobs=1, run_index=(0, 1, 2), results_dir=None,
+        run_id=None):
+
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    written_files = list()
+    results = list()
+    if not isinstance(run_index, (list, tuple)):
+        run_index = [run_index]
+
+    for run_ind in run_index:
+        mne_psds, freqs, info = _psd_average_sensor_space(
+            subject=subject, run_index=run_ind,
+            recordings_path=recordings_path, fmin=fmin, fmax=fmax,
+            hcp_path=hcp_path, n_ssp=n_ssp, decim=decim,
+            mt_bandwidth=mt_bandwidth,
+            duration=duration, n_jobs=n_jobs)
+
+        written_files.append(
+            op.join(recordings_path, subject, 'psds-bads-%i-%i-ave.fif' % (
+                int(fmin), int(fmax))))
+        mne_psds.save(written_files[-1])
+
+        med_power = np.median(np.log10(mne_psds.data), 1)
+        outlier_mask, left_mad, right_mad = mad_detect(med_power)
+
+        plot_range = np.arange(len(info['ch_names']))
+
+        outlier_label = np.array(info['ch_names'])
+
+        fig_mad = plt.figure()
+        plt.axhline(np.median(med_power), color='#225ee4')
+        plt.plot(
+            plot_range[~outlier_mask],
+            med_power[~outlier_mask], linestyle='None', marker='o',
+            color='white')
+        plt.ylim(med_power.min() - 1, med_power.min() + 2)
+        for inds in np.where(outlier_mask)[0]:
+            plt.plot(
+                plot_range[inds],
+                med_power[inds], linestyle='None', marker='o', color='red',
+                label=outlier_label[inds])
+        plt.ylabel('median log10(PSD)')
+        plt.xlabel('channel index')
+        plt.legend()
+        report.add_figs_to_section(
+            fig_mad, '%s: run-%i' % (subject, run_ind + 1), 'MAD power')
+
+        mne_med_power = mne.EvokedArray(
+            data=med_power[:, None], info=deepcopy(info), tmin=0, nave=1)
+        hcp.preprocessing.transform_sensors_to_mne(mne_med_power)
+        fig = mne_med_power.plot_topomap(
+            [0], scale=1, cmap='viridis', vmin=np.min, vmax=np.max,
+            show_names=True, mask=outlier_mask[:, None], contours=1,
+            time_format='', unit='dB')
+
+        for tt in fig.findobj(matplotlib.text.Text):
+            if tt.get_text().startswith('A'):
+                tt.set_color('red')
+
+        fig.set_dpi(dpi)
+
+        if report is not None:
+            report.add_figs_to_section(
+                fig, '%s: run-%i' % (subject, run_ind + 1), 'topo')
+
+        results.append({'subject': subject, 'run': run_ind,
+                        'labels': outlier_label[outlier_mask]})
+
+        fig_log = plot_loglog(
+            mne_psds.data, freqs[(freqs >= fmin) & (freqs <= fmax)])
+        fig_log.set_dpi(dpi)
+        if report is not None:
+            report.add_figs_to_section(
+                fig_log, '%s: run-%i' % (subject, run_ind + 1), 'loglog')
+        plt.close('all')
+
+    if run_id is not None and results_dir is not None:
+        df = pd.DataFrame(results)
+        written_files.append(
+            op.join(results_dir, run_id, 'bads_by_power.csv'))
+        df.to_csv(written_files[-1])
+
+    return written_files
