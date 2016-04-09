@@ -48,6 +48,9 @@ parser.add_argument('--interpreter', metavar='interpreter',
 parser.add_argument('--n_par', metavar='n_par', type=int,
                     default=n_par, nargs='?',
                     help='the number of jobs to run in parallel')
+parser.add_argument('--sleep', metavar='sleep', type=int,
+                    default=30, nargs='?',
+                    help='the default sleep time')
 parser.add_argument('--par_sep', metavar='par_sep', type=str,
                     default='colon', nargs='?', choices=['colon', 'dash'],
                     help='the parallel syntax. used to be -- on older version')
@@ -55,6 +58,7 @@ parser.add_argument('--par_sep', metavar='par_sep', type=str,
 input_args = parser.parse_args()
 script = input_args.script
 n_par = input_args.n_par
+sleep = input_args.sleep
 if input_args.par_sep == 'colon':
     par_sep = ':::'
 elif input_args.par_sep == 'dash':
@@ -68,14 +72,14 @@ if input_args.interpreter is not None:
     interpreter = input_args.interpreter
 
 
-def run_parallel(script, args, par_args, par_target):
+def run_parallel(script, args, par_args, par_target, sleep):
     """Run GNU parallel"""
     cmd = 'parallel -j {}'.format(n_par)
     cmd += ' --progress'
     cmd += ' {interpreter} {script} {args} --{target} '.format(
         interpreter=interpreter,
         script=script, args=' '.join(args), target=par_target)
-    cmd += '{}\n; sleep 30;'
+    cmd += '{}\n; ' + '{sleep} 60;'.format(sleep=sleep)
     cmd += ' {par_sep} {par_args}'.format(
         par_sep=par_sep, par_args=' '.join(par_args))
     command = shlex.split(cmd)
@@ -85,4 +89,4 @@ def run_parallel(script, args, par_args, par_target):
 
 if __name__ == '__main__':
     run_parallel(script=script, args=args, par_args=par_args,
-                 par_target=par_target)
+                 par_target=par_target, sleep=sleep)
