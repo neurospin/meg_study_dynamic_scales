@@ -13,6 +13,11 @@ from .utils import mad_detect
 from .viz import plot_loglog
 
 
+def dummy(subject):
+    print(subject)
+    return list()
+
+
 def _psd_average_sensor_space(
         subject, run_index, recordings_path, fmin, fmax,
         hcp_path, n_ssp, decim,  mt_bandwidth, duration, n_jobs):
@@ -42,21 +47,33 @@ def _psd_average_sensor_space(
 
 
 def compute_power_sepctra(
-        subject, run_index, recordings_path, fmin=None, fmax=200,
+        subject, recordings_path, fmin=None, fmax=200,
         hcp_path=op.curdir, n_ssp=12, decim=1, mt_bandwidth=4, duration=30,
-        report=None, dpi=300, n_jobs=1):
+        report=None, dpi=300, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
+        run_id=None):
 
-    mne_psds, freqs, info = _psd_average_sensor_space(
-        subject=subject, run_index=run_index,
-        recordings_path=recordings_path, fmin=fmin, fmax=fmax,
-        hcp_path=hcp_path, n_ssp=n_ssp, decim=decim, mt_bandwidth=mt_bandwidth,
-        duration=duration, n_jobs=n_jobs)
+    for run_index in run_inds:
+        mne_psds, freqs, info = _psd_average_sensor_space(
+            subject=subject, run_index=run_index,
+            recordings_path=recordings_path, fmin=fmin, fmax=fmax,
+            hcp_path=hcp_path, n_ssp=n_ssp, decim=decim,
+            mt_bandwidth=mt_bandwidth,
+            duration=duration, n_jobs=n_jobs)
 
-    written_files = list()
-    written_files.append(
-        op.join(recordings_path, subject, 'psds-ave-%i-%i-ave.fif' % (
-            int(fmin), int(fmax))))
-    mne_psds.save(written_files[-1])
+        written_files = list()
+        written_files.append(
+            op.join(recordings_path, subject, 'psds-%i-ave-%i-%i-ave.fif' % (
+                run_index, int(0 if fmin is None else fmin), int(fmax))))
+        fig_log = plot_loglog(
+            mne_psds.data, freqs[(freqs >= fmin) & (freqs <= fmax)],
+            xticks=(0.1, 1, 10, 100))
+        fig_log.set_dpi(dpi)
+        if report is not None:
+            report.add_figs_to_section(
+                fig_log, '%s: run-%i' % (subject, run_index + 1), 'loglog')
+        mne_psds.save(written_files[-1])
+
+    return written_files
 
 
 def compute_power_sepctra_and_bads(

@@ -85,6 +85,13 @@ bucket : str
     The bucket name
 key_list : list
     The s3 keys to download
+out_path : str
+    Either a full path where to store files or the name of the local variable
+    e.g., hcp_path
+aws_access_key_id : str
+    The access key
+aws_secret_access_key : str
+    The secret key
 
 The same pattern as in --fun_path is expected:
     ~/scripts/library:downloaders.get_from_my_bucket'
@@ -93,7 +100,11 @@ parser.add_argument('--downloaders', nargs='+', type=str,
                     help=additional_downloaders_doc)
 
 
-def download_from_s3_bucket(bucket, hcp_path, key_list, prefix=''):
+def download_from_s3_bucket(bucket, out_path, key_list,
+                            aws_access_key_id,
+                            aws_secret_access_key,
+                            prefix='',
+                            **kwargs):
     start_time = time.time()
     files_written = list()
     for key in key_list:
@@ -101,16 +112,16 @@ def download_from_s3_bucket(bucket, hcp_path, key_list, prefix=''):
             key_path = key.split(prefix)[1]
         else:
             key_path = key
-        fname = op.join(hcp_path, key_path.lstrip('/'))
+        fname = op.join(out_path, key_path.lstrip('/'))
         files_written.append(fname)
         if not op.exists(op.split(fname)[0]):
             os.makedirs(op.split(fname)[0])
         if not op.exists(fname):
             aws_hacks.download_from_s3(
-                aws_access_key_id=hcp_aws_access_key_id,
-                aws_secret_access_key=hcp_aws_secret_access_key,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
                 fname=fname,
-                bucket=bucket, key=key)
+                bucket=bucket, key=key, **kwargs)
     elapsed_time = time.time() - start_time
     print('Elapsed time downloading {} from s3 {}'.format(
         bucket,
@@ -121,8 +132,14 @@ def download_from_s3_bucket(bucket, hcp_path, key_list, prefix=''):
 def guess_type(string):
     if '.' in string and ''.join(string.split('.')).isdigit():
         return float(string)
-    if string.isdigit():
+    elif string.isdigit():
         return int(string)
+    elif string == 'None':
+        return None
+    elif string == 'True':
+        return True
+    elif string == 'False':
+        return False
     else:
         return string
 
@@ -146,7 +163,8 @@ storage_dir = args.storage_dir
 run_id = args.run_id
 fun_path = args.fun_path
 fun_args = args.fun_args
-hcp_run_inds = tuple(args.hcp_run_inds)
+
+run_inds = tuple(args.hcp_run_inds)
 hcp_data_types = tuple(args.hcp_data_types)
 hcp_preprocessed_outputs = tuple(args.hcp_preprocessed_outputs)
 hcp_anatomy_output = args.hcp_anatomy_output
@@ -174,15 +192,21 @@ if not args.hcp_no_meg:
 written_files = list()
 if args.s3 is True:
     written_files.extend(download_from_s3_bucket(
-        bucket='hcp-openaccess', hcp_path=hcp_path, key_head='HCP_900',
+        bucket='hcp-openaccess', out_path=hcp_path, key_head='HCP_900',
+        aws_access_key_id=hcp_aws_access_key_id,
+        aws_secret_access_key=hcp_aws_secret_access_key,
         key_list=s3_files))
 
 if args.downloaders is not None:
     for downloader in args.downloaders:
+        pars = get_function(downloader)[0](subject=subject)
+        out_path = pars.pop('out_path')
+        if '/' not in out_path:
+            out_path = locals().get(out_path, None)
+            if out_path is None:
+                raise ValueError('Could not guess %s' % out_path)
         written_files.extend(
-            download_from_s3_bucket(
-                hcp_path=hcp_path,
-                **get_function(downloader)[0](subject=subject)))
+            download_from_s3_bucket(out_path=out_path, **pars))
 
 # parse module and function
 fun, fun_name, fun_path = get_function(args.fun_path)
@@ -200,16 +224,19 @@ with open(written_files[-1], 'w') as fid:
 report = Report(subject)
 
 # check that only keyword arguments are used
-assert len(fun_args) % 2 == 0
-assert [k.endswith('--') for k in fun_args[0::2]]
-
-fun_args = {k.replace('--', ''): guess_type(v) for k, v in
-            zip(fun_args[0::2], fun_args[1::2])}
+if fun_args:
+    assert len(fun_args) % 2 == 0
+    assert [k.endswith('--') for k in fun_args[0::2]]
+    fun_args = {k.replace('--', ''): guess_type(v) for k, v in
+                zip(fun_args[0::2], fun_args[1::2])}
+    fun_args['n_jobs'] = 1  # for now
+else:
+    fun_args = dict()
 
 # now add locals as function arguments if they are supported
 argspec = inspect.getargspec(fun)
 for arg in ['report', 'hcp_path', 'recordings_path', 'run_id', 'subject',
-            'hcp_run_inds']:
+            'run_inds']:
     if arg in argspec.args:
         fun_args[arg] = locals()[arg]
 
@@ -217,7 +244,6 @@ print('calling "%s" with:\n\t%s' % (
     fun_path + '.' + fun_name,
     '\n\t'.join(['{}: {}'.format(k, v) for k, v in fun_args.items()])
 ))
-fun_args['n_jobs'] = 1  # for now
 
 written_files.extend(fun(**fun_args))
 # write the report into the directory with run id.
