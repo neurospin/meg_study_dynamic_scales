@@ -179,11 +179,10 @@ if args.s3 is True:
 
 if args.downloaders is not None:
     for downloader in args.downloaders:
-        import pdb; pdb.set_trace()
         written_files.extend(
             download_from_s3_bucket(
                 hcp_path=hcp_path,
-                **get_function(downloader)(subject=subject)))
+                **get_function(downloader)[0](subject=subject)))
 
 # parse module and function
 fun, fun_name, fun_path = get_function(args.fun_path)
