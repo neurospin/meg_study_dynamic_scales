@@ -62,7 +62,7 @@ def compute_power_sepctra(
 def compute_power_sepctra_and_bads(
         subject, recordings_path, fmin=None, fmax=200,
         hcp_path=op.curdir, n_ssp=12, decim=16,  mt_bandwidth=4, duration=1,
-        report=None, dpi=300, n_jobs=1, run_index=(0, 1, 2), results_dir=None,
+        report=None, dpi=300, n_jobs=1, run_inds=(0, 1, 2), results_dir=None,
         run_id=None):
 
     import matplotlib
@@ -70,10 +70,10 @@ def compute_power_sepctra_and_bads(
     import matplotlib.pyplot as plt
     written_files = list()
     results = list()
-    if not isinstance(run_index, (list, tuple)):
-        run_index = [run_index]
+    if not isinstance(run_inds, (list, tuple)):
+        run_inds = [run_inds]
 
-    for run_ind in run_index:
+    for run_ind in run_inds:
         mne_psds, freqs, info = _psd_average_sensor_space(
             subject=subject, run_index=run_ind,
             recordings_path=recordings_path, fmin=fmin, fmax=fmax,
