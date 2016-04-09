@@ -80,7 +80,7 @@ parser.add_argument('--hcp_no_meg', action='store_true',
                     help='skip anat')
 
 additional_downloaders_doc = """custom s3 downloaders
-should return a dict with the keys:
+should take subject parameter and return a dict with the keys:
 bucket : str
     The bucket name
 key_list : list
@@ -179,9 +179,11 @@ if args.s3 is True:
 
 if args.downloaders is not None:
     for downloader in args.downloaders:
+        import pdb; pdb.set_trace()
         written_files.extend(
             download_from_s3_bucket(
-                hcp_path=hcp_path, **get_function(downloader)()))
+                hcp_path=hcp_path,
+                **get_function(downloader)(subject=subject)))
 
 # parse module and function
 fun, fun_name, fun_path = get_function(args.fun_path)
