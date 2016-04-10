@@ -66,7 +66,7 @@ parser.add_argument('--run_id', metavar='run_id', type=str,
                     nargs='?', default=None,
                     help='the run_id')
 parser.add_argument('--out_bucket', metavar='out_bucket', type=str,
-                    nargs='?', default=storage_dir,
+                    nargs='?', default='hcp-meg-data',
                     help='the out bucket')
 parser.add_argument('--hcp_run_inds', nargs='+', type=int, default=(0, 1, 2))
 parser.add_argument('--hcp_data_types', nargs='+', type=str, default=('rest',))
@@ -184,15 +184,15 @@ if not args.hcp_no_anat:
 if not args.hcp_no_meg:
     s3_files += hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=hcp_data_types + ('noise_empty_room',),
-        processing=('unprocessed'), run_inds=hcp_run_inds)
+        processing=('unprocessed'), run_inds=run_inds)
     s3_files += hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=hcp_data_types, processing=('preprocessed'),
-        outputs=hcp_preprocessed_outputs, run_inds=hcp_run_inds)
+        outputs=hcp_preprocessed_outputs, run_inds=run_inds)
 
 written_files = list()
 if args.s3 is True:
     written_files.extend(download_from_s3_bucket(
-        bucket='hcp-openaccess', out_path=hcp_path, key_head='HCP_900',
+        bucket='hcp-openaccess', out_path=hcp_path, prefix='HCP_900',
         aws_access_key_id=hcp_aws_access_key_id,
         aws_secret_access_key=hcp_aws_secret_access_key,
         key_list=s3_files))
