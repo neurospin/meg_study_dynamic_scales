@@ -88,6 +88,7 @@ def compute_power_spectra(
     else:
         raise ValueError('"out" must be "epochs" or "average"')
 
+    written_files = list()
     for run_index in run_inds:
         mne_psds, freqs = fun(
             subject=subject, run_index=run_index,
@@ -96,11 +97,11 @@ def compute_power_spectra(
             mt_bandwidth=mt_bandwidth,
             duration=duration, n_jobs=n_jobs)
 
-        written_files = list()
         written_files.append(
             op.join(recordings_path, subject, 'psds-r%i-%i-%i-%s.fif' % (
                 run_index, int(0 if fmin is None else fmin), int(fmax),
                 file_tag)))
+        mne_psds.save(written_files[-1])
         fig_log = plot_loglog(
             mne_psds.average().data if out == 'epochs' else mne_psds.data,
             freqs[(freqs >= fmin) & (freqs <= fmax)],
@@ -109,7 +110,6 @@ def compute_power_spectra(
         if report is not None:
             report.add_figs_to_section(
                 fig_log, '%s: run-%i' % (subject, run_index + 1), 'loglog')
-        mne_psds.save(written_files[-1])
 
     return written_files
 

@@ -38,7 +38,6 @@ hcp_aws_secret_access_key = aws_details['Secret Access Key'].values[0]
 
 parser = ArgumentParser(description='tell subject')
 parser.add_argument('--subject', metavar='subject', type=str, nargs='?',
-                    default=None,
                     help='the subject to extract')
 parser.add_argument('--storage_dir', metavar='storage_dir', type=str,
                     nargs='?', default=storage_dir,
@@ -246,49 +245,56 @@ print_fun_args = ('calling "%s" with:\n\t%s' % (
     '\n\t'.join(['{}: {}'.format(k, v) for k, v in fun_args.items()])
 ))
 print(print_fun_args)
-written_files.extend(fun(**fun_args))
-# write the report into the directory with run id.
-# and add files from provenance tracking to written files
-written_files.extend(list({op.join(results_path, f) for f in
-                           os.listdir(results_path)}))
-written_files.append(op.join(results_path, 'report.html'))
-report.save(written_files[-1], open_browser=False)
+error = None
+try:
+    written_files.extend(fun(**fun_args))
+    # write the report into the directory with run id.
+    # and add files from provenance tracking to written files
+    written_files.extend(list({op.join(results_path, f) for f in
+                               os.listdir(results_path)}))
+    written_files.append(op.join(results_path, 'report.html'))
+    report.save(written_files[-1], open_browser=False)
 
-written_files.append(op.join(results_path, 'done'))
-with open(written_files[-1], 'w') as fid:
-    fid.write(print_fun_args)
+    written_files.append(op.join(results_path, 'done'))
+    with open(written_files[-1], 'w') as fid:
+        fid.write(print_fun_args)
 
-written_files.append(op.join(results_path, 'written_files.txt'))
+    written_files.append(op.join(results_path, 'written_files.txt'))
 
-with open(written_files[-1], 'w') as fid:
-    fid.write('\n'.join(written_files))
+    with open(written_files[-1], 'w') as fid:
+        fid.write('\n'.join(written_files))
 
-if args.s3 is True:
-    start_time = time.time()
-    for fname in written_files:
-        if hcp_path not in fname:
-            print("uploading %s" % fname)
-            key = fname.split(storage_dir)[-1].lstrip('/')
-            aws_hacks.upload_to_s3(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                fname=fname,
-                bucket=args.out_bucket, key=key, host='s3.amazonaws.com')
+    if args.s3 is True:
+        start_time = time.time()
+        for fname in written_files:
+            if hcp_path not in fname:
+                print("uploading %s" % fname)
+                key = fname.split(storage_dir)[-1].lstrip('/')
+                aws_hacks.upload_to_s3(
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    fname=fname,
+                    bucket=args.out_bucket, key=key, host='s3.amazonaws.com')
 
-    elapsed_time = time.time() - start_time
-    print('Elapsed time uploading to s3 {}'.format(
-        time.strftime('%H:%M:%S', time.gmtime(elapsed_time))))
+        elapsed_time = time.time() - start_time
+        print('Elapsed time uploading to s3 {}'.format(
+            time.strftime('%H:%M:%S', time.gmtime(elapsed_time))))
 
-if not args.keep_files and args.s3 is True:
-    my_files_to_clean = list()
-    my_files_to_clean += written_files
-    my_files_to_clean += [op.join(hcp_path,
-                                  f.replace('HCP_900/', ''))
-                          for f in s3_files]
-    for fname in my_files_to_clean:
-        if op.exists(fname):
-            os.remove(fname)
+except Exception, error:
+    pass
+finally:
+    if not args.keep_files and args.s3 is True:
+        my_files_to_clean = list()
+        my_files_to_clean += written_files
+        my_files_to_clean += [op.join(hcp_path,
+                                      f.replace('HCP_900/', ''))
+                              for f in s3_files]
+        for fname in my_files_to_clean:
+            if op.exists(fname):
+                os.remove(fname)
 
-elapsed_time_global = time.time() - start_time_global
-print('Elapsed time for running scripts {}'.format(
-    time.strftime('%H:%M:%S', time.gmtime(elapsed_time_global))))
+    elapsed_time_global = time.time() - start_time_global
+    print('Elapsed time for running scripts {}'.format(
+        time.strftime('%H:%M:%S', time.gmtime(elapsed_time_global))))
+    if error is not None:
+        raise error
