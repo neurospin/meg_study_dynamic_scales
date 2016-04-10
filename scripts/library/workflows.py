@@ -74,7 +74,7 @@ def _psd_epochs_sensor_space(
     return mne_psds, freqs
 
 
-def compute_power_sepctra(
+def compute_power_spectra(
         subject, recordings_path, fmin=None, fmax=200,
         hcp_path=op.curdir, n_ssp=12, decim=1, mt_bandwidth=4, duration=30,
         report=None, dpi=300, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
@@ -114,7 +114,7 @@ def compute_power_sepctra(
     return written_files
 
 
-def compute_power_sepctra_and_bads(
+def compute_power_spectra_and_bads(
         subject, recordings_path, fmin=None, fmax=200,
         hcp_path=op.curdir, n_ssp=12, decim=16,  mt_bandwidth=4, duration=1,
         report=None, dpi=300, n_jobs=1, run_inds=(0, 1, 2), results_dir=None,

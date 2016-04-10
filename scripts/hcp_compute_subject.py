@@ -146,6 +146,7 @@ def guess_type(string):
 
 def get_function(fun_path):
     module_path, fun_path = fun_path.split(':')
+    module_path = op.expanduser(module_path)
     sys.path.append(module_path)
     library_name = op.split(module_path)[-1]
     fun_path = fun_path.split('.')
@@ -154,7 +155,7 @@ def get_function(fun_path):
     fun = getattr(importlib.import_module(fun_path), fun_name, None)
     if fun is None:
         raise ValueError('could not find %s in module %s' % (
-            fun_path, fun_name))
+            fun_name, fun_path))
     return fun, fun_path, fun_name
 
 args = parser.parse_args()
@@ -176,6 +177,9 @@ recordings_path = op.join(storage_dir, 'hcp-meg')
 for this_dir in [storage_dir, hcp_path, recordings_path]:
     if not op.exists(this_dir):
         os.makedirs(this_dir)
+
+# parse module and function
+fun, fun_name, fun_path = get_function(args.fun_path)
 
 s3_files = list()
 if not args.hcp_no_anat:
@@ -208,9 +212,6 @@ if args.downloaders is not None:
         written_files.extend(
             download_from_s3_bucket(out_path=out_path, **pars))
 
-# parse module and function
-fun, fun_name, fun_path = get_function(args.fun_path)
-
 # configure logging + provenance tracking magic
 # use fun_name for script name
 report, run_id, results_dir, logger = setup_provenance(
@@ -240,11 +241,11 @@ for arg in ['report', 'hcp_path', 'recordings_path', 'run_id', 'subject',
     if arg in argspec.args:
         fun_args[arg] = locals()[arg]
 
-print('calling "%s" with:\n\t%s' % (
+print_fun_args = ('calling "%s" with:\n\t%s' % (
     fun_path + '.' + fun_name,
     '\n\t'.join(['{}: {}'.format(k, v) for k, v in fun_args.items()])
 ))
-
+print(print_fun_args)
 written_files.extend(fun(**fun_args))
 # write the report into the directory with run id.
 # and add files from provenance tracking to written files
@@ -252,6 +253,11 @@ written_files.extend(list({op.join(results_path, f) for f in
                            os.listdir(results_path)}))
 written_files.append(op.join(results_path, 'report.html'))
 report.save(written_files[-1], open_browser=False)
+
+written_files.append(op.join(results_path, 'done'))
+with open(written_files[-1], 'w') as fid:
+    fid.write(print_fun_args)
+
 written_files.append(op.join(results_path, 'written_files.txt'))
 
 with open(written_files[-1], 'w') as fid:
@@ -260,12 +266,14 @@ with open(written_files[-1], 'w') as fid:
 if args.s3 is True:
     start_time = time.time()
     for fname in written_files:
-        key = fname.split(storage_dir)[-1].lstrip('/')
-        aws_hacks.upload_to_s3(
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-            fname=fname,
-            bucket=args.out_bucket, key=key, host='s3.amazonaws.com')
+        if hcp_path not in fname:
+            print("uploading %s" % fname)
+            key = fname.split(storage_dir)[-1].lstrip('/')
+            aws_hacks.upload_to_s3(
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                fname=fname,
+                bucket=args.out_bucket, key=key, host='s3.amazonaws.com')
 
     elapsed_time = time.time() - start_time
     print('Elapsed time uploading to s3 {}'.format(
