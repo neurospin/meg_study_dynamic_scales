@@ -226,6 +226,7 @@ if args.downloaders is not None:
             out_path = locals().get(out_path, None)
             if out_path is None:
                 raise ValueError('Could not guess %s' % out_path)
+            out_path = op.join(out_path, subject)
         written_files.extend(
             download_from_s3_bucket(out_path=out_path, **pars))
 

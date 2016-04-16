@@ -35,29 +35,31 @@ for decim in src_decims:
 
 def get_bads_psd(subject):
     key_list = (
-        'psds-bads-5-35-ave.fif',
+        'hcp-meg/{}/psds-bads-5-35-ave.fif'.format(subject),
     )
     out = dict(
         bucket='hcp-meg-data',
         key_list=key_list,
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
-        out_path='recordings_path'
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
     )
     return out
 
 
 def get_single_trial_psd(subject):
-    key_list = (
+    key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
         'psds-r0-0-150-epo.fif',
         'psds-r1-0-150-epo.fif',
         'psds-r2-0-150-epo.fif'
-    )
+    )]
     out = dict(
         bucket='hcp-meg-data',
         key_list=key_list,
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
-        out_path='recordings_path'
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
     )
     return out
