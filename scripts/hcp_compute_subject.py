@@ -36,6 +36,12 @@ aws_details = pd.read_csv('aws_hcp_details.csv')
 hcp_aws_access_key_id = aws_details['Access Key Id'].values[0]
 hcp_aws_secret_access_key = aws_details['Secret Access Key'].values[0]
 
+
+def download_only(subject):
+    print('downloading only')
+    return list()
+
+
 parser = ArgumentParser(description='tell subject')
 parser.add_argument('--subject', metavar='subject', type=str, nargs='?',
                     help='the subject to extract')
@@ -44,6 +50,7 @@ parser.add_argument('--storage_dir', metavar='storage_dir', type=str,
                     help='the storage dir')
 parser.add_argument('--fun_path', metavar='fun_path', type=str,
                     nargs='?',
+                    default=download_only,
                     help=(
                         'the function path, e.g. '
                         '"/home/ubuntu/gihtub/mylib:algos.math.sine"'
@@ -62,7 +69,7 @@ parser.add_argument('--n_jobs', metavar='n_jobs', type=int,
 parser.add_argument('--s3', action='store_true',
                     help='skip s3')
 parser.add_argument('--run_id', metavar='run_id', type=str,
-                    nargs='?', default=None,
+                    nargs='?',
                     help='the run_id')
 parser.add_argument('--out_bucket', metavar='out_bucket', type=str,
                     nargs='?', default='hcp-meg-data',
@@ -144,6 +151,12 @@ def guess_type(string):
 
 
 def get_function(fun_path):
+    if callable(fun_path):
+        fun = fun_path
+        fun_name = fun.__name__
+        fun_path = inspect.getabsfile(fun).rstrip('.py')
+        return fun, fun_path, fun_name
+
     module_path, fun_path = fun_path.split(':')
     module_path = op.expanduser(module_path)
     sys.path.append(module_path)
@@ -164,6 +177,7 @@ run_id = args.run_id
 fun_path = args.fun_path
 fun_args = args.fun_args
 
+
 run_inds = tuple(args.hcp_run_inds)
 hcp_data_types = tuple(args.hcp_data_types)
 hcp_preprocessed_outputs = tuple(args.hcp_preprocessed_outputs)
@@ -174,8 +188,12 @@ hcp_data_types = tuple(args.hcp_data_types)
 hcp_path = op.join(storage_dir, 'HCP')
 recordings_path = op.join(storage_dir, 'hcp-meg')
 for this_dir in [storage_dir, hcp_path, recordings_path]:
+    # with multiple processes this can exist already
     if not op.exists(this_dir):
-        os.makedirs(this_dir)
+        try:
+            os.makedirs(this_dir)
+        except OSError, oserr:
+            pass
 
 # parse module and function
 fun, fun_name, fun_path = get_function(args.fun_path)
@@ -186,7 +204,7 @@ if not args.hcp_no_anat:
         subject, hcp_path_bucket='HCP_900', mode=hcp_anatomy_output)
 if not args.hcp_no_meg:
     s3_files += hcp.io.file_mapping.get_s3_keys_meg(
-        subject, data_types=hcp_data_types + ('noise_empty_room',),
+        subject, data_types=hcp_data_types,
         processing=('unprocessed'), run_inds=run_inds)
     s3_files += hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=hcp_data_types, processing=('preprocessed'),

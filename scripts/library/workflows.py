@@ -9,6 +9,10 @@ from mne.time_frequency import psd_multitaper
 import hcp
 
 from .hcp_utils import hcp_preprocess_ssp_ica
+from .hcp_utils import hcp_compute_noise_cov
+from hcp import io
+from hcp.preprocessing import set_eog_ecg_channels
+
 from .utils import mad_detect
 from .viz import plot_loglog
 
@@ -72,6 +76,31 @@ def _psd_epochs_sensor_space(
     mne_psds = mne.EpochsArray(data=X_psds, info=info, events=events, tmin=0)
     hcp.preprocessing.transform_sensors_to_mne(mne_psds)
     return mne_psds, freqs
+
+
+def compute_ecg_events(
+        subject, recordings_path, hcp_path, results_dir=None,
+        run_inds=(0, 1, 2), run_id=None, report=None):
+
+    written_files = list()
+    for run_index in run_inds:
+        raw = io.read_raw_hcp(subject=subject, data_type='rest',
+                              run_index=run_index, hcp_path=hcp_path)
+        set_eog_ecg_channels(raw)
+        raw.pick_channels(['ECG'])
+        assert len(raw.ch_names) == 1
+        if report is not None:
+            fig = raw.plot()
+            report.add_figs_to_section(fig, 'ECG', subject)
+        written_files.append(op.join(recordings_path, subject,
+                                     'ecg-r%i-raw.fif' % run_index))
+        raw.save(written_files[-1])
+        events, _, _ = mne.preprocessing.find_ecg_events(raw)
+        written_files.append(op.join(recordings_path, subject,
+                             'ecg-r%i-eve.fif' % run_index))
+        mne.write_events(written_files[-1], events)
+
+    return written_files
 
 
 def compute_power_spectra(
@@ -201,4 +230,66 @@ def compute_power_spectra_and_bads(
             op.join(results_dir, run_id, 'bads_by_power.csv'))
         df.to_csv(written_files[-1])
 
+    return written_files
+
+
+def compute_covariance(
+        subject, recordings_path, filter_params, filter_freq_ranges=(
+        (None, None), (None, 3), (4, 7), (8, 12), (13, 20), (20, 30),
+        (30, 60), (60, 120)), report=None, hcp_path=op.curdir,
+        n_jobs=1, n_ssp=12, results_dir=None, run_id=None):
+
+    kwargs = dict(subject=subject, recordings_path=recordings_path,
+                  hcp_path=hcp_path, filter_freq_ranges=filter_freq_ranges,
+                  n_jobs=n_jobs, n_ssp=n_ssp)
+    written_files = list()
+    for fmin, fmax, noise_cov, info in hcp_compute_noise_cov(**kwargs):
+        if report is not None:
+            report.add_figs_to_section(
+                mne.viz.plot_noise_cov(info, noise_cov, cmpap='viridis'),
+                ['cov', 'eig'],
+                ['subject-%d-%s' % (fmin, fmax)] * 2)
+        written_files.append(
+            op.join(recordings_path, subject, 'noise-%s-%s-cov.fif' % (
+                    fmin, fmax)))
+        noise_cov.save(written_files[-1])
+    return written_files
+
+
+def compute_inverse_solution(subject, recordings_path, spacings=None,
+                             results_dir=None,
+                             filter_freq_ranges=None, inverse_params=None):
+    if filter_freq_ranges:
+        filter_freq_ranges = (
+            (None, None), (None, 3), (4, 7), (8, 12), (13, 20), (20, 30),
+            (30, 60), (60, 120))
+    if spacings is None:
+        spacings = ['oct6', 'oct5', 'oct4', 'ico3', 'ico2']
+    if inverse_params is None:
+        inverse_params = dict(
+            loose=0.2, depth=0.8, fixed=False, limit_depth_chs=True)
+    inv_fname_tmp = '{spacing}_{surface}_dist-{add_dist}-{fmin}-{fmax}-inv.fif'
+    written_files = list()
+    for this_spacing in spacings:
+        src_params = dict(spacing=this_spacing, surface='white',
+                          add_dist=True)
+        fwd_fname = '{spacing}_{surface}_dist-{add_dist}-fwd.fif'.format(
+            **src_params).lower()
+        forward = mne.read_forward_solution(
+            op.join(recordings_path, subject, fwd_fname))
+        for fmin, fmax in filter_freq_ranges:
+            inv_params = deepcopy(src_params)
+            inv_params.update(fmin=fmin, fmax=fmax)
+            noise_cov = mne.read_cov(
+                op.join(recordings_path, subject, 'noise-%s-%s-cov.fif' % (
+                    fmin, fmax)))
+
+            inv_fname = inv_fname_tmp.format(**inv_params).lower()
+
+            inverse_operator = mne.make_inverse_operator(
+                forward=forward, noise_cov=noise_cov, **inverse_params)
+            written_files.append(
+                op.join(recordings_path, subject, inv_fname))
+            mne.minimum_norm.write_inverse_operator(
+                written_files[-1], inverse_operator)
     return written_files

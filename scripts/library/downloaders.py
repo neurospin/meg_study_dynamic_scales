@@ -31,3 +31,33 @@ for decim in src_decims:
         return get_files
 
     locals()['src_fwd_%s' % decim] = src_forward()
+
+
+def get_bads_psd(subject):
+    key_list = (
+        'psds-bads-5-35-ave.fif',
+    )
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path'
+    )
+    return out
+
+
+def get_single_trial_psd(subject):
+    key_list = (
+        'psds-r0-0-150-epo.fif',
+        'psds-r1-0-150-epo.fif',
+        'psds-r2-0-150-epo.fif'
+    )
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path'
+    )
+    return out

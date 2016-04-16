@@ -35,3 +35,38 @@ def hcp_preprocess_ssp_ica(subject, run_index, recordings_path,
     raw.filter(fmin, fmax, n_jobs=n_jobs, method='iir',
                iir_params=dict(order=4, ftype='butter'))
     return raw
+
+
+def hcp_band_pass(
+        raw, fmin, fmax, order=4, notch=True, ftype='butter', n_jobs=1):
+    if notch is True:
+        raw.notch_filter(
+            freqs=np.arange(60, 241, 60), method='iir',
+            iir_params=dict(order=order, ftype=ftype))
+    raw.filter(fmin, None, n_jobs=n_jobs, method='iir',
+               iir_params=dict(order=order, ftype=ftype))
+    raw.filter(None, fmin, n_jobs=n_jobs, method='iir',
+               iir_params=dict(order=order, ftype=ftype))
+
+
+def hcp_compute_noise_cov(subject, run_index, recordings_path,
+                          hcp_path=op.curdir, n_jobs=1,
+                          filter_freq_ranges=tuple((None, None)),
+                          method=('shrunk', 'empirical'),
+                          n_ssp=12):
+
+    raw_noise = hcp.io.read_raw_hcp(
+        subject, hcp_path=hcp_path, data_type='noise_empty_room',
+        run_index=0)
+
+    if n_ssp:
+        projs_noise = mne.compute_proj_raw(raw_noise, n_mag=n_ssp)
+        raw_noise.add_proj(projs_noise)
+    out = list()
+    for fmin, fmax in filter_freq_ranges:
+        raw_noise_ = raw_noise.copy()
+        hcp_band_pass(raw_noise_, fmin, fmax, notch=True, n_jobs=n_jobs)
+        noise_cov = mne.compute_raw_covariance(
+            raw_noise_, tstep=10, reject=dict(mag=5e-12), method=method)
+        out.append((fmin, fmax, noise_cov))
+    return out
