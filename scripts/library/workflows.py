@@ -103,6 +103,59 @@ def compute_ecg_events(
     return written_files
 
 
+def compute_source_power_spectra(
+        subject, recordings_path, fmin=None, fmax=200,
+        hcp_path=op.curdir, n_ssp=12, decim=1, mt_bandwidth=4, duration=30,
+        report=None, dpi=300, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
+        run_id=None, out='epochs', spacing='oct3', add_dist=True,
+        surface='white', covariance_fmin=None, covariance_fmax=None,
+        lambda2=1. / 3. ** 2, method='MNE',
+        pick_ori=None, label=None,
+        nave=1, pca=True, inv_split=None, bandwidth=4.0, adaptive=False,
+        low_bias=True, prepared=False, verbose=None):
+
+    written_files = list()
+    inv_fname = (
+        '{spacing}_{surface}_dist-{add_dist}-{fmin}-{fmax}-inv.fif'.format(
+            spacing=spacing, add_dist=add_dist,
+            fmin=covariance_fmin, fmax=covariance_fmax))
+
+    inverse_operator = mne.minimum_norm.prepare_inverse_operator(
+        orig=mne.minimum_norm.read_inverse_operator(inv_fname),
+        nave=nave, lambda2=lambda2, method=method)
+
+    for run_index in run_inds:
+        raw = hcp_preprocess_ssp_ica(
+            subject=subject, run_index=run_index,
+            recordings_path=recordings_path,
+            hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs,
+            n_ssp=n_ssp)
+
+        events = mne.make_fixed_length_events(raw, 3000, duration=duration)
+        picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
+        epochs = mne.Epochs(
+            raw, picks=picks, events=events, event_id=3000, tmin=0,
+            tmax=duration, detrend=1, baseline=None,
+            reject=dict(mag=5e-12), preload=True, decim=decim, proj=True)
+        epochs.apply_proj()
+
+        gen_stc_epochs = mne.minimum_norm.compute_source_psd_epochs(
+            epochs, inverse_operator, fmin=fmin, fmax=fmax, pick_ori=pick_ori,
+            label=label, pca=pca, inv_split=inv_split, bandwidth=bandwidth,
+            adaptive=adaptive, low_bias=low_bias, return_generator=True,
+            n_jobs=n_jobs, prepared=True)
+
+        for ii, stc in enumerate(gen_stc_epochs):
+            written_files.append(
+                op.join(recordings_path, subject,
+                        'psds-e%i-r%i-%i-%i-stc.fif' % (
+                            ii, run_index, int(0 if fmin is None else fmin),
+                            int(fmax))))
+            stc.save(written_files[-1])
+
+    return written_files
+
+
 def compute_power_spectra(
         subject, recordings_path, fmin=None, fmax=200,
         hcp_path=op.curdir, n_ssp=12, decim=1, mt_bandwidth=4, duration=30,
@@ -143,6 +196,18 @@ def compute_power_spectra(
     return written_files
 
 
+def average_power_spectra(subject, recordings_path, fmin=None, fmax=200,
+                          results_dir=None,
+                          run_inds=(0, 1, 2), run_id=None, out='average'):
+    written_files = list()
+    for run_index in run_inds:
+        fname = op.join(recordings_path, subject, 'psds-r%i-%i-%i-%s.fif' % (
+                        run_index, fmin, fmax))
+        written_files.append(fname.replace('psds-r', 'psds-ave-r'))
+        mne.read_epochs(fname).average().save(written_files[-1])
+    return written_files
+
+
 def compute_power_spectra_and_bads(
         subject, recordings_path, fmin=None, fmax=200,
         hcp_path=op.curdir, n_ssp=12, decim=16,  mt_bandwidth=4, duration=1,
@@ -158,18 +223,22 @@ def compute_power_spectra_and_bads(
         run_inds = [run_inds]
 
     for run_ind in run_inds:
-        mne_psds, freqs, info = _psd_average_sensor_space(
+        mne_psds, freqs = _psd_average_sensor_space(
             subject=subject, run_index=run_ind,
             recordings_path=recordings_path, fmin=fmin, fmax=fmax,
             hcp_path=hcp_path, n_ssp=n_ssp, decim=decim,
             mt_bandwidth=mt_bandwidth,
             duration=duration, n_jobs=n_jobs)
-
+        info = mne_psds.info
         written_files.append(
-            op.join(recordings_path, subject, 'psds-bads-%i-%i-ave.fif' % (
-                int(fmin), int(fmax))))
+            op.join(recordings_path, subject, 'psds-bads-r%i-%i-%i-ave.fif' % (
+                run_ind, int(fmin), int(fmax))))
         mne_psds.save(written_files[-1])
-
+        written_files.append(
+            op.join(recordings_path, subject,
+                    'psds-bads-r%i-%i-%i-times.npy' % (
+                        run_ind, int(fmin), int(fmax))))
+        np.save(written_files[-1], freqs)
         med_power = np.median(np.log10(mne_psds.data), 1)
         outlier_mask, left_mad, right_mad = mad_detect(med_power)
 
