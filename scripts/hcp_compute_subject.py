@@ -68,6 +68,8 @@ parser.add_argument('--n_jobs', metavar='n_jobs', type=int,
                     help='the number of jobs to run in parallel')
 parser.add_argument('--s3', action='store_true',
                     help='skip s3')
+parser.add_argument('--s3_no_upload', action='store_true',
+                    help='skip s3')
 parser.add_argument('--run_id', metavar='run_id', type=str,
                     nargs='?',
                     help='the run_id')
@@ -76,8 +78,10 @@ parser.add_argument('--out_bucket', metavar='out_bucket', type=str,
                     help='the out bucket')
 parser.add_argument('--hcp_run_inds', nargs='+', type=int, default=(0, 1, 2))
 parser.add_argument('--hcp_data_types', nargs='+', type=str, default=('rest',))
-parser.add_argument('--hcp_preprocessed_outputs', nargs='+', type=str,
-                    default=('bads', 'ica'))
+parser.add_argument('--hcp_outputs', nargs='+', type=str,
+                    default=('raw', 'bads', 'ica'))
+parser.add_argument('--hcp_onsets', nargs='+', type=str,
+                    default=('stim',))
 parser.add_argument('--hcp_anatomy_output', type=str,
                     default='minimal')
 parser.add_argument('--hcp_no_anat', action='store_true',
@@ -180,7 +184,8 @@ fun_args = args.fun_args
 
 run_inds = tuple(args.hcp_run_inds)
 hcp_data_types = tuple(args.hcp_data_types)
-hcp_preprocessed_outputs = tuple(args.hcp_preprocessed_outputs)
+hcp_outputs = tuple(args.hcp_outputs)
+hcp_onsets = tuple(args.hcp_onsets)
 hcp_anatomy_output = args.hcp_anatomy_output
 hcp_data_types = tuple(args.hcp_data_types)
 
@@ -205,10 +210,9 @@ if not args.hcp_no_anat:
 if not args.hcp_no_meg:
     s3_files += hcp.io.file_mapping.get_s3_keys_meg(
         subject, data_types=hcp_data_types,
-        processing=('unprocessed'), run_inds=run_inds)
-    s3_files += hcp.io.file_mapping.get_s3_keys_meg(
-        subject, data_types=hcp_data_types, processing=('preprocessed'),
-        outputs=hcp_preprocessed_outputs, run_inds=run_inds)
+        onsets=hcp_onsets,
+        hcp_path_bucket='HCP_900',
+        outputs=hcp_outputs, run_inds=run_inds)
 
 written_files = list()
 if args.s3 is True:
@@ -283,7 +287,7 @@ try:
     with open(written_files[-1], 'w') as fid:
         fid.write('\n'.join(written_files))
 
-    if args.s3 is True:
+    if args.s3 is True and not args.s3_no_upload:
         start_time = time.time()
         for fname in written_files:
             if hcp_path not in fname:

@@ -34,9 +34,15 @@ for decim in src_decims:
 
 
 def get_bads_psd(subject):
-    key_list = (
-        'hcp-meg/{}/psds-bads-5-35-ave.fif'.format(subject),
-    )
+    key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
+        'psds-bads-r0-1-50-times.npy',
+        'psds-bads-r0-1-50-ave.fif',
+        # 'psds-bads-r1-1-50-times.npy',
+        'psds-bads-r1-1-50-ave.fif',
+        # 'psds-bads-r2-1-50-times.npy',
+        'psds-bads-r2-1-50-ave.fif',
+        'compute_power_spectra_and_bads/bads-psds-2/report.html'
+    )]
     out = dict(
         bucket='hcp-meg-data',
         key_list=key_list,
