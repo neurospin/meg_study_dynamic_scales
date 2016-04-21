@@ -198,12 +198,13 @@ def compute_power_spectra(
 
 def average_power_spectra(subject, recordings_path, fmin=None, fmax=200,
                           results_dir=None,
-                          run_inds=(0, 1, 2), run_id=None, out='average'):
+                          run_inds=(0, 1, 2), run_id=None):
     written_files = list()
     for run_index in run_inds:
-        fname = op.join(recordings_path, subject, 'psds-r%i-%i-%i-%s.fif' % (
+        fname = op.join(recordings_path, subject, 'psds-r%i-%i-%i-epo.fif' % (
                         run_index, fmin, fmax))
-        written_files.append(fname.replace('psds-r', 'psds-ave-r'))
+        written_files.append(
+            fname.replace('psds-r', 'psds-ave-r').replace('epo', 'ave'))
         mne.read_epochs(fname).average().save(written_files[-1])
     return written_files
 

@@ -252,7 +252,6 @@ if fun_args:
     assert [k.endswith('--') for k in fun_args[0::2]]
     fun_args = {k.replace('--', ''): guess_type(v) for k, v in
                 zip(fun_args[0::2], fun_args[1::2])}
-    fun_args['n_jobs'] = 1  # for now
 else:
     fun_args = dict()
 
@@ -261,7 +260,10 @@ argspec = inspect.getargspec(fun)
 for arg in ['report', 'hcp_path', 'recordings_path', 'run_id', 'subject',
             'run_inds']:
     if arg in argspec.args:
-        fun_args[arg] = locals()[arg]
+        if arg == 'n_jobs':
+            fun_args[arg] = 1
+        else:
+            fun_args[arg] = locals()[arg]
 
 print_fun_args = ('calling "%s" with:\n\t%s' % (
     fun_path + '.' + fun_name,
