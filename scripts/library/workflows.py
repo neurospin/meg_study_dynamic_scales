@@ -50,6 +50,20 @@ def _psd_average_sensor_space(
     return mne_psds, freqs
 
 
+def compute_alpha_fluctuations(
+        subject, recordings_path, alpha_peak, fmin=None, fmax=200,
+        hcp_path=op.curdir, n_ssp=12, decim=1,
+        report=None, dpi=300, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
+        run_id=None, verbose=None):
+    for run_index in run_inds:
+        raw = hcp_preprocess_ssp_ica(
+            subject=subject, run_index=run_index,
+            recordings_path=recordings_path,
+            hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs,
+            n_ssp=n_ssp)
+    pass
+
+
 def _psd_epochs_sensor_space(
         subject, run_index, recordings_path, fmin, fmax,
         hcp_path, n_ssp, decim,  mt_bandwidth, duration, n_jobs):
@@ -304,21 +318,26 @@ def compute_power_spectra_and_bads(
 
 
 def compute_covariance(
-        subject, recordings_path, filter_params, filter_freq_ranges=(
-        (None, None), (None, 3), (4, 7), (8, 12), (13, 20), (20, 30),
-        (30, 60), (60, 120)), report=None, hcp_path=op.curdir,
+        subject, recordings_path, filter_freq_ranges=None,
+        report=None, hcp_path=op.curdir,
         n_jobs=1, n_ssp=12, results_dir=None, run_id=None):
+    if filter_freq_ranges is None:
+        filter_freq_ranges = ((None, None),)
+    elif filter_freq_ranges == 'full':
+        filter_freq_ranges = (
+            (None, None), (None, 3), (4, 7), (8, 12), (13, 20),
+            (20, 30), (30, 60), (60, 120))
 
     kwargs = dict(subject=subject, recordings_path=recordings_path,
-                  hcp_path=hcp_path, filter_freq_ranges=filter_freq_ranges,
+                  hcp_path=hcp_path,
+                  filter_freq_ranges=filter_freq_ranges,
                   n_jobs=n_jobs, n_ssp=n_ssp)
     written_files = list()
     for fmin, fmax, noise_cov, info in hcp_compute_noise_cov(**kwargs):
         if report is not None:
             report.add_figs_to_section(
-                mne.viz.plot_noise_cov(info, noise_cov, cmpap='viridis'),
-                ['cov', 'eig'],
-                ['subject-%d-%s' % (fmin, fmax)] * 2)
+                mne.viz.plot_cov(info=info, cov=noise_cov),
+                ['cov', 'eig'], 'subject-%s-%s' % (fmin, fmax))
         written_files.append(
             op.join(recordings_path, subject, 'noise-%s-%s-cov.fif' % (
                     fmin, fmax)))
@@ -329,10 +348,12 @@ def compute_covariance(
 def compute_inverse_solution(subject, recordings_path, spacings=None,
                              results_dir=None,
                              filter_freq_ranges=None, inverse_params=None):
-    if filter_freq_ranges:
+    if filter_freq_ranges is None:
+        filter_freq_ranges = ((None, None),)
+    elif filter_freq_ranges == 'full':
         filter_freq_ranges = (
-            (None, None), (None, 3), (4, 7), (8, 12), (13, 20), (20, 30),
-            (30, 60), (60, 120))
+            (None, None), (None, 3), (4, 7), (8, 12), (13, 20),
+            (20, 30), (30, 60), (60, 120))
     if spacings is None:
         spacings = ['oct6', 'oct5', 'oct4', 'ico3', 'ico2']
     if inverse_params is None:

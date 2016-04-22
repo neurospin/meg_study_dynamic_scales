@@ -214,9 +214,9 @@ if not args.hcp_no_meg:
         hcp_path_bucket='HCP_900',
         outputs=hcp_outputs, run_inds=run_inds)
 
-written_files = list()
+downloaded_files = list()
 if args.s3 is True:
-    written_files.extend(download_from_s3_bucket(
+    downloaded_files.extend(download_from_s3_bucket(
         bucket='hcp-openaccess', out_path=hcp_path, prefix='HCP_900',
         aws_access_key_id=hcp_aws_access_key_id,
         aws_secret_access_key=hcp_aws_secret_access_key,
@@ -231,7 +231,7 @@ if args.downloaders is not None:
             if out_path is None:
                 raise ValueError('Could not guess %s' % out_path)
             out_path = op.join(out_path, subject)
-        written_files.extend(
+        downloaded_files.extend(
             download_from_s3_bucket(out_path=out_path, **pars))
 
 # configure logging + provenance tracking magic
@@ -240,6 +240,7 @@ report, run_id, results_dir, logger = setup_provenance(
     script=fun, results_dir=op.join(recordings_path, subject),
     config=__file__, run_id=run_id)
 
+written_files = list()
 results_path = op.join(results_dir, run_id)
 written_files.append(op.join(results_path, 'call.txt'))
 with open(written_files[-1], 'w') as fid:
@@ -309,7 +310,7 @@ except Exception, error:
     pass
 finally:
     if not args.keep_files and args.s3 is True:
-        my_files_to_clean = list()
+        my_files_to_clean = downloaded_files[:]
         my_files_to_clean += written_files
         my_files_to_clean += [op.join(hcp_path,
                                       f.replace('HCP_900/', ''))

@@ -5,7 +5,7 @@ import numpy as np
 import mne
 
 import hcp
-from hcp.preprocessing import apply_ica_hcp
+from hcp.preprocessing import apply_ica_hcp, interpolate_missing_channels
 
 
 def hcp_preprocess_ssp_ica(subject, run_index, recordings_path,
@@ -26,14 +26,16 @@ def hcp_preprocess_ssp_ica(subject, run_index, recordings_path,
         run_index=0)
     exclude = np.array(annots['ica']['ecg_eog_ic']) - 1
     for this_raw in (raw_noise, raw):
-        this_raw.info['bads'] = annots['channels']['all']
         this_raw.pick_types(meg='mag', ref_meg=False)
+        this_raw.info['bads'] = annots['channels']['all']
         if len(exclude) > 0:
             apply_ica_hcp(this_raw, ica_mat=ica_mat, exclude=exclude)
     projs_noise = mne.compute_proj_raw(raw_noise, n_mag=n_ssp)
     raw.add_proj(projs_noise)
     raw.filter(fmin, fmax, n_jobs=n_jobs, method='iir',
                iir_params=dict(order=4, ftype='butter'))
+    interpolate_missing_channels(raw, subject=subject, data_type='rest',
+                                 hcp_path=hcp_path)
     return raw
 
 
@@ -49,7 +51,7 @@ def hcp_band_pass(
                iir_params=dict(order=order, ftype=ftype))
 
 
-def hcp_compute_noise_cov(subject, run_index, recordings_path,
+def hcp_compute_noise_cov(subject, recordings_path,
                           hcp_path=op.curdir, n_jobs=1,
                           filter_freq_ranges=tuple((None, None)),
                           method=('shrunk', 'empirical'),
@@ -68,5 +70,5 @@ def hcp_compute_noise_cov(subject, run_index, recordings_path,
         hcp_band_pass(raw_noise_, fmin, fmax, notch=True, n_jobs=n_jobs)
         noise_cov = mne.compute_raw_covariance(
             raw_noise_, tstep=10, reject=dict(mag=5e-12), method=method)
-        out.append((fmin, fmax, noise_cov))
+        out.append((fmin, fmax, noise_cov, raw_noise_.info))
     return out
