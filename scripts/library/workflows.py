@@ -14,6 +14,7 @@ from hcp import io
 from hcp.preprocessing import set_eog_ecg_channels
 
 from .utils import mad_detect
+from .event import make_overlapping_events
 from .viz import plot_loglog
 
 
@@ -22,39 +23,10 @@ def dummy(subject):
     return list()
 
 
-def _psd_average_sensor_space(
-        subject, run_index, recordings_path, fmin, fmax,
-        hcp_path, n_ssp, decim,  mt_bandwidth, duration, n_jobs):
-
-    raw = hcp_preprocess_ssp_ica(
-        subject=subject, run_index=run_index, recordings_path=recordings_path,
-        hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs, n_ssp=n_ssp)
-
-    events = mne.make_fixed_length_events(raw, 3000, duration=duration)
-    picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
-    epochs = mne.Epochs(
-        raw, picks=picks, events=events, event_id=3000, tmin=0, tmax=duration,
-        detrend=1, baseline=None,
-        reject=dict(mag=5e-12), preload=True, decim=decim, proj=True)
-
-    X_psds = 0.0
-
-    for ii in range(len(epochs.events)):
-        psds, freqs = psd_multitaper(
-            epochs[ii], fmin=fmin, fmax=fmax, bandwidth=mt_bandwidth, n_jobs=1)
-        X_psds += psds
-    X_psds /= (ii + 1)
-    X_psds = X_psds[0]
-    mne_psds = mne.EvokedArray(
-        data=X_psds, info=deepcopy(epochs.info), tmin=0, nave=1)
-    hcp.preprocessing.transform_sensors_to_mne(mne_psds)
-    return mne_psds, freqs
-
-
 def compute_alpha_fluctuations(
         subject, recordings_path, alpha_peak, fmin=None, fmax=200,
-        hcp_path=op.curdir, n_ssp=12, decim=1,
-        report=None, dpi=300, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
+        hcp_path=op.curdir, n_ssp=16, decim=1,
+        report=None, dpi=600, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
         run_id=None, verbose=None):
     for run_index in run_inds:
         raw = hcp_preprocess_ssp_ica(
@@ -62,35 +34,7 @@ def compute_alpha_fluctuations(
             recordings_path=recordings_path,
             hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs,
             n_ssp=n_ssp)
-    pass
-
-
-def _psd_epochs_sensor_space(
-        subject, run_index, recordings_path, fmin, fmax,
-        hcp_path, n_ssp, decim,  mt_bandwidth, duration, n_jobs):
-
-    raw = hcp_preprocess_ssp_ica(
-        subject=subject, run_index=run_index, recordings_path=recordings_path,
-        hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs, n_ssp=n_ssp)
-
-    events = mne.make_fixed_length_events(raw, 3000, duration=duration)
-    picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
-    epochs = mne.Epochs(
-        raw, picks=picks, events=events, event_id=3000, tmin=0, tmax=duration,
-        detrend=1, baseline=None,
-        reject=dict(mag=5e-12), preload=True, decim=decim, proj=True)
-    epochs.apply_proj()
-
-    X_psds, freqs = psd_multitaper(
-        epochs, fmin=fmin, fmax=fmax, bandwidth=mt_bandwidth, n_jobs=1)
-
-    info = deepcopy(epochs.info)
-    info['projs'] = list()
-    events = epochs.events.copy()
-    del epochs
-    mne_psds = mne.EpochsArray(data=X_psds, info=info, events=events, tmin=0)
-    hcp.preprocessing.transform_sensors_to_mne(mne_psds)
-    return mne_psds, freqs
+        pass
 
 
 def compute_ecg_events(
@@ -119,15 +63,18 @@ def compute_ecg_events(
 
 
 def compute_source_power_spectra(
-        subject, recordings_path, fmin=None, fmax=200,
-        hcp_path=op.curdir, n_ssp=12, decim=1, mt_bandwidth=4, duration=30,
-        report=None, dpi=300, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
+        subject, recordings_path,
+        events_duration=30, events_overlap=None,
+        fmin=None, fmax=200,
+        hcp_path=op.curdir, n_ssp=16, decim=1, mt_bandwidth=4, duration=30,
+        report=None, dpi=600, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
         run_id=None, out='epochs', spacing='oct3', add_dist=True,
         surface='white', covariance_fmin=None, covariance_fmax=None,
         lambda2=1. / 3. ** 2, method='MNE',
         pick_ori=None, label=None,
         nave=1, pca=True, adaptive=False,
         inv_split=1,
+        compute_sensor_psds=False,
         low_bias=True, prepared=False, verbose=None):
 
     written_files = list()
@@ -145,48 +92,117 @@ def compute_source_power_spectra(
             subject=subject, run_index=run_index,
             recordings_path=recordings_path,
             hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs,
-            n_ssp=n_ssp)
+            n_ssp=n_ssp, return_noise=False)
 
-        events = mne.make_fixed_length_events(raw, 3000, duration=duration)
-        picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
-        raw.apply_proj()
-        epochs = mne.Epochs(
-            raw, picks=picks, events=events, event_id=3000, tmin=0,
-            tmax=duration, detrend=1, baseline=None,
-            reject=dict(mag=5e-12), preload=True, decim=decim, proj=True)
+        epochs = get_epochs(raw, events_duration=events_duration,
+                            events_overlap=events_overlap)
 
-        gen_stc_epochs = mne.minimum_norm.compute_source_psd_epochs(
-            epochs, inverse_operator,
-            fmin=(0 if fmin is None else fmin),
-            method=method,
-            fmax=(np.inf if fmax is None else fmax), pick_ori=pick_ori,
-            label=label, pca=pca, inv_split=inv_split, bandwidth=mt_bandwidth,
-            adaptive=adaptive, low_bias=low_bias, return_generator=True,
-            n_jobs=n_jobs, prepared=True)
-
-        if run_ii == 0:
+        written_files.extend(
+            _compute_source_psd(
+                epochs=epochs, method=method, run_ii=run_ii,
+                fmax=fmax, fmin=fmin, pick_ori=pick_ori, label=label,
+                pca=pca, inv_split=inv_split,
+                mt_bandwidth=mt_bandwidth, adaptive=adaptive,
+                low_bias=low_bias,
+                inverse_operator=inverse_operator,
+                n_jobs=n_jobs, recordings_path=recordings_path,
+                subject=subject, run_id=run_id)
+        )
+        if compute_sensor_psds:
+            mne_psds, freqs = _psd_epochs_sensor_space(
+                epochs=epochs, fmin=fmin, fmax=fmax, mt_bandwidth=mt_bandwidth,
+                n_jobs=n_jobs)
             written_files.append(
-                op.join(recordings_path, subject,
-                        'psds-bads-r%s-%s-%s-times.npy' % (
-                            run_index,
-                            (int(fmin) if fmin is not None else fmin),
-                            (int(fmax) if fmax is not None else fmax))))
-        for ii, stc in enumerate(gen_stc_epochs):
-            print('stc epoch %s run %s' % (ii, run_ii))
-            written_files.append(
-                op.join(recordings_path, subject,
-                        ('psds-e%s-r%s-%s-%s-stc.fif' % (
-                            ii, run_index, int(0 if fmin is None else fmin),
-                            int(fmax))).lower()))
-            stc.save(written_files[-1])
-
+                op.join(recordings_path, subject, 'psds-r%i-%i-%i-%s.fif' % (
+                    run_index, int(0 if fmin is None else fmin), int(fmax),
+                    'epo')))
     return written_files
+
+
+def _compute_source_psd(epochs, method, fmax, fmin, pick_ori,
+                        label, pca, inv_split, inverse_operator, run_ii,
+                        mt_bandwidth, adaptive, low_bias, run_index,
+                        n_jobs, recordings_path, subject):
+
+    gen_stc_epochs = mne.minimum_norm.compute_source_psd_epochs(
+        epochs, inverse_operator,
+        fmin=(0 if fmin is None else fmin),
+        method=method,
+        fmax=(np.inf if fmax is None else fmax), pick_ori=pick_ori,
+        label=label, pca=pca, inv_split=inv_split, bandwidth=mt_bandwidth,
+        adaptive=adaptive, low_bias=low_bias, return_generator=True,
+        n_jobs=n_jobs, prepared=True)
+    written_files = list()
+    if run_ii == 0:
+        written_files.append(
+            op.join(recordings_path, subject,
+                    'psds-bads-r%s-%s-%s-times.npy' % (
+                        run_index,
+                        (int(fmin) if fmin is not None else fmin),
+                        (int(fmax) if fmax is not None else fmax))))
+    for ii, stc in enumerate(gen_stc_epochs):
+        print('stc epoch %s run %s' % (ii, run_ii))
+        written_files.append(
+            op.join(recordings_path, subject,
+                    ('psds-e%s-r%s-%s-%s-stc.fif' % (
+                        ii, run_index, int(0 if fmin is None else fmin),
+                        int(fmax))).lower()))
+        stc.save(written_files[-1])
+
+
+def _psd_average_sensor_space(epochs, fmin, fmax, mt_bandwidth, n_jobs):
+
+    X_psds = 0.0
+    for ii in range(len(epochs.events)):
+        psds, freqs = psd_multitaper(
+            epochs[ii], fmin=fmin, fmax=fmax, bandwidth=mt_bandwidth,
+            n_jobs=n_jobs)
+        X_psds += psds
+    X_psds /= (ii + 1)
+    X_psds = X_psds[0]
+    mne_psds = mne.EvokedArray(
+        data=X_psds, info=deepcopy(epochs.info), tmin=0, nave=1)
+    hcp.preprocessing.transform_sensors_to_mne(mne_psds)
+    return mne_psds, freqs
+
+
+def _psd_epochs_sensor_space(epochs, fmin, fmax, mt_bandwidth, n_jobs):
+
+    X_psds, freqs = psd_multitaper(
+        epochs, fmin=fmin, fmax=fmax, bandwidth=mt_bandwidth, n_jobs=1)
+
+    info = deepcopy(epochs.info)
+    info['projs'] = list()
+    events = epochs.events.copy()
+    del epochs
+    mne_psds = mne.EpochsArray(data=X_psds, info=info, events=events, tmin=0)
+    hcp.preprocessing.transform_sensors_to_mne(mne_psds)
+    return mne_psds, freqs
+
+
+def get_epochs(raw, events_duration, events_overlap=None,
+               reject_mag=5e-12):
+    if events_overlap is None:
+        events = mne.make_fixed_length_events(
+            raw, 3000, duration=events_duration)
+    else:
+        events = make_overlapping_events(
+            raw, 3000, stop=raw.times[raw.last_samp],
+            overlap=events_overlap, duration=events_duration)
+    picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
+    epochs = mne.Epochs(
+        raw, picks=picks, events=events, event_id=3000, tmin=0,
+        tmax=events_duration,
+        detrend=1, baseline=None, decim=1,
+        reject=dict(mag=reject_mag), preload=False, proj=True)
+    return epochs
 
 
 def compute_power_spectra(
         subject, recordings_path, fmin=None, fmax=200,
-        hcp_path=op.curdir, n_ssp=12, decim=1, mt_bandwidth=4, duration=30,
-        report=None, dpi=300, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
+        hcp_path=op.curdir, n_ssp=16, decim=1, mt_bandwidth=4,
+        report=None, dpi=600, n_jobs=1, results_dir=None, run_inds=(0, 1, 2),
+        events_duration=30, events_overlap=None,
         run_id=None, out='average'):
     if out == 'average':
         fun = _psd_average_sensor_space
@@ -199,12 +215,19 @@ def compute_power_spectra(
 
     written_files = list()
     for run_index in run_inds:
-        mne_psds, freqs = fun(
+
+        raw = hcp_preprocess_ssp_ica(
             subject=subject, run_index=run_index,
-            recordings_path=recordings_path, fmin=fmin, fmax=fmax,
-            hcp_path=hcp_path, n_ssp=n_ssp, decim=decim,
-            mt_bandwidth=mt_bandwidth,
-            duration=duration, n_jobs=n_jobs)
+            recordings_path=recordings_path,
+            decim=decim,
+            hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs,
+            n_ssp=n_ssp)
+
+        epochs = get_epochs(raw, events_duration=events_duration,
+                            events_overlap=events_overlap)
+
+        mne_psds, freqs = fun(epochs=epochs, fmin=fmin, fmax=fmax,
+                              mt_bandwidth=mt_bandwidth, n_jobs=n_jobs)
 
         written_files.append(
             op.join(recordings_path, subject, 'psds-r%i-%i-%i-%s.fif' % (
@@ -215,6 +238,7 @@ def compute_power_spectra(
             mne_psds.average().data if out == 'epochs' else mne_psds.data,
             freqs[(freqs >= fmin) & (freqs <= fmax)],
             xticks=(0.1, 1, 10, 100))
+
         fig_log.set_dpi(dpi)
         if report is not None:
             report.add_figs_to_section(
@@ -238,8 +262,8 @@ def average_power_spectra(subject, recordings_path, fmin=None, fmax=200,
 
 def compute_power_spectra_and_bads(
         subject, recordings_path, fmin=None, fmax=200,
-        hcp_path=op.curdir, n_ssp=12, decim=16,  mt_bandwidth=4, duration=1,
-        report=None, dpi=300, n_jobs=1, run_inds=(0, 1, 2), results_dir=None,
+        hcp_path=op.curdir, n_ssp=16, decim=16,  mt_bandwidth=4, duration=1,
+        report=None, dpi=600, n_jobs=1, run_inds=(0, 1, 2), results_dir=None,
         run_id=None):
 
     import matplotlib
@@ -294,7 +318,6 @@ def compute_power_spectra_and_bads(
 
         mne_med_power = mne.EvokedArray(
             data=med_power[:, None], info=deepcopy(info), tmin=0, nave=1)
-        hcp.preprocessing.transform_sensors_to_mne(mne_med_power)
         fig = mne_med_power.plot_topomap(
             [0], scale=1, cmap='viridis', vmin=np.min, vmax=np.max,
             show_names=True, mask=outlier_mask[:, None], contours=1,
@@ -333,7 +356,7 @@ def compute_power_spectra_and_bads(
 def compute_covariance(
         subject, recordings_path, filter_freq_ranges=None,
         report=None, hcp_path=op.curdir, inverse_params=None,
-        n_jobs=1, n_ssp=12, results_dir=None, run_id=None):
+        n_jobs=1, n_ssp=16, results_dir=None, run_id=None):
     if filter_freq_ranges is None:
         filter_freq_ranges = ((None, None),)
     elif filter_freq_ranges == 'full':
@@ -393,7 +416,6 @@ def compute_inverse_solution(subject, recordings_path, spacings=None,
                     fmin, fmax)))
 
             inv_fname = inv_fname_tmp.format(**inv_params).lower()
-
             inverse_operator = mne.minimum_norm.make_inverse_operator(
                 info=info, forward=forward, noise_cov=noise_cov,
                 **inverse_params)
@@ -408,7 +430,7 @@ def compute_covariance_and_inverse(
         subject, recordings_path, filter_freq_ranges=None,
         report=None, hcp_path=op.curdir, spacings=None,
         inverse_params=None,
-        n_jobs=1, n_ssp=12, results_dir=None, run_id=None):
+        n_jobs=1, n_ssp=16, results_dir=None, run_id=None):
     written_files = list()
     written_files.extend(
         compute_covariance(
