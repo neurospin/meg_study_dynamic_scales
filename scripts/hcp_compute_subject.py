@@ -225,7 +225,8 @@ if args.s3 is True:
 if args.downloaders is not None:
     for downloader in args.downloaders:
         pars = get_function(downloader)[0](subject=subject)
-        out_path = pars.pop('out_path')
+        out_path = pars['out_path']
+        pars = {k: v for k, v in pars.items() if k != 'out_path'}
         if '/' not in out_path:
             out_path = locals().get(out_path, None)
             if out_path is None:

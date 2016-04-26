@@ -38,6 +38,7 @@ def _psd_average_sensor_space(
         reject=dict(mag=5e-12), preload=True, decim=decim, proj=True)
 
     X_psds = 0.0
+
     for ii in range(len(epochs.events)):
         psds, freqs = psd_multitaper(
             epochs[ii], fmin=fmin, fmax=fmax, bandwidth=mt_bandwidth, n_jobs=1)
@@ -125,20 +126,21 @@ def compute_source_power_spectra(
         surface='white', covariance_fmin=None, covariance_fmax=None,
         lambda2=1. / 3. ** 2, method='MNE',
         pick_ori=None, label=None,
-        nave=1, pca=True, inv_split=None, bandwidth=4.0, adaptive=False,
+        nave=1, pca=True, adaptive=False,
+        inv_split=1,
         low_bias=True, prepared=False, verbose=None):
 
     written_files = list()
-    inv_fname = (
+    inv_fname = op.join(recordings_path, subject, (
         '{spacing}_{surface}_dist-{add_dist}-{fmin}-{fmax}-inv.fif'.format(
-            spacing=spacing, add_dist=add_dist,
-            fmin=covariance_fmin, fmax=covariance_fmax))
+            surface='white', spacing=spacing, add_dist=add_dist,
+            fmin=covariance_fmin, fmax=covariance_fmax).lower()))
 
     inverse_operator = mne.minimum_norm.prepare_inverse_operator(
-        orig=mne.minimum_norm.read_inverse_operator(inv_fname),
-        nave=nave, lambda2=lambda2, method=method)
+        orig=mne.minimum_norm.read_inverse_operator(inv_fname), nave=nave,
+        lambda2=lambda2, method=method)
 
-    for run_index in run_inds:
+    for run_ii, run_index in enumerate(run_inds):
         raw = hcp_preprocess_ssp_ica(
             subject=subject, run_index=run_index,
             recordings_path=recordings_path,
@@ -147,24 +149,35 @@ def compute_source_power_spectra(
 
         events = mne.make_fixed_length_events(raw, 3000, duration=duration)
         picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
+        raw.apply_proj()
         epochs = mne.Epochs(
             raw, picks=picks, events=events, event_id=3000, tmin=0,
             tmax=duration, detrend=1, baseline=None,
             reject=dict(mag=5e-12), preload=True, decim=decim, proj=True)
-        epochs.apply_proj()
 
         gen_stc_epochs = mne.minimum_norm.compute_source_psd_epochs(
-            epochs, inverse_operator, fmin=fmin, fmax=fmax, pick_ori=pick_ori,
-            label=label, pca=pca, inv_split=inv_split, bandwidth=bandwidth,
+            epochs, inverse_operator,
+            fmin=(0 if fmin is None else fmin),
+            method=method,
+            fmax=(np.inf if fmax is None else fmax), pick_ori=pick_ori,
+            label=label, pca=pca, inv_split=inv_split, bandwidth=mt_bandwidth,
             adaptive=adaptive, low_bias=low_bias, return_generator=True,
             n_jobs=n_jobs, prepared=True)
 
-        for ii, stc in enumerate(gen_stc_epochs):
+        if run_ii == 0:
             written_files.append(
                 op.join(recordings_path, subject,
-                        'psds-e%i-r%i-%i-%i-stc.fif' % (
+                        'psds-bads-r%s-%s-%s-times.npy' % (
+                            run_index,
+                            (int(fmin) if fmin is not None else fmin),
+                            (int(fmax) if fmax is not None else fmax))))
+        for ii, stc in enumerate(gen_stc_epochs):
+            print('stc epoch %s run %s' % (ii, run_ii))
+            written_files.append(
+                op.join(recordings_path, subject,
+                        ('psds-e%s-r%s-%s-%s-stc.fif' % (
                             ii, run_index, int(0 if fmin is None else fmin),
-                            int(fmax))))
+                            int(fmax))).lower()))
             stc.save(written_files[-1])
 
     return written_files
@@ -319,7 +332,7 @@ def compute_power_spectra_and_bads(
 
 def compute_covariance(
         subject, recordings_path, filter_freq_ranges=None,
-        report=None, hcp_path=op.curdir,
+        report=None, hcp_path=op.curdir, inverse_params=None,
         n_jobs=1, n_ssp=12, results_dir=None, run_id=None):
     if filter_freq_ranges is None:
         filter_freq_ranges = ((None, None),)
@@ -340,14 +353,16 @@ def compute_covariance(
                 ['cov', 'eig'], 'subject-%s-%s' % (fmin, fmax))
         written_files.append(
             op.join(recordings_path, subject, 'noise-%s-%s-cov.fif' % (
-                    fmin, fmax)))
+                    fmin, fmax)).lower())
         noise_cov.save(written_files[-1])
     return written_files
 
 
 def compute_inverse_solution(subject, recordings_path, spacings=None,
                              results_dir=None,
-                             filter_freq_ranges=None, inverse_params=None):
+                             filter_freq_ranges=None, inverse_params=None,
+                             hcp_path=op.curdir,
+                             run_id=None):
     if filter_freq_ranges is None:
         filter_freq_ranges = ((None, None),)
     elif filter_freq_ranges == 'full':
@@ -355,12 +370,14 @@ def compute_inverse_solution(subject, recordings_path, spacings=None,
             (None, None), (None, 3), (4, 7), (8, 12), (13, 20),
             (20, 30), (30, 60), (60, 120))
     if spacings is None:
-        spacings = ['oct6', 'oct5', 'oct4', 'ico3', 'ico2']
+        spacings = ['ico2', 'oct3', 'oct4', 'oct5', 'oct5', 'oct6']
     if inverse_params is None:
         inverse_params = dict(
             loose=0.2, depth=0.8, fixed=False, limit_depth_chs=True)
     inv_fname_tmp = '{spacing}_{surface}_dist-{add_dist}-{fmin}-{fmax}-inv.fif'
     written_files = list()
+    info = hcp.io.read_info_hcp(
+        subject, data_type='rest', run_index=0, hcp_path=hcp_path)
     for this_spacing in spacings:
         src_params = dict(spacing=this_spacing, surface='white',
                           add_dist=True)
@@ -377,10 +394,35 @@ def compute_inverse_solution(subject, recordings_path, spacings=None,
 
             inv_fname = inv_fname_tmp.format(**inv_params).lower()
 
-            inverse_operator = mne.make_inverse_operator(
-                forward=forward, noise_cov=noise_cov, **inverse_params)
+            inverse_operator = mne.minimum_norm.make_inverse_operator(
+                info=info, forward=forward, noise_cov=noise_cov,
+                **inverse_params)
             written_files.append(
                 op.join(recordings_path, subject, inv_fname))
             mne.minimum_norm.write_inverse_operator(
                 written_files[-1], inverse_operator)
+    return written_files
+
+
+def compute_covariance_and_inverse(
+        subject, recordings_path, filter_freq_ranges=None,
+        report=None, hcp_path=op.curdir, spacings=None,
+        inverse_params=None,
+        n_jobs=1, n_ssp=12, results_dir=None, run_id=None):
+    written_files = list()
+    written_files.extend(
+        compute_covariance(
+            subject=subject, recordings_path=recordings_path,
+            filter_freq_ranges=recordings_path,
+            report=report, hcp_path=hcp_path,
+            n_jobs=n_jobs, n_ssp=n_ssp, results_dir=results_dir,
+            run_id=run_id))
+    written_files.extend(
+        compute_inverse_solution(
+            subject=subject, recordings_path=recordings_path,
+            spacings=spacings, results_dir=results_dir,
+            filter_freq_ranges=filter_freq_ranges,
+            inverse_params=inverse_params,
+            hcp_path=hcp_path, run_id=run_id)
+    )
     return written_files

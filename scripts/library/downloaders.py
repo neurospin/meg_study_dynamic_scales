@@ -20,17 +20,58 @@ for decim in src_decims:
             key_list=key_list,
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
-            out_path='recordings_path'
+            out_path='recordings_path',
+            prefix='hcp-meg/{}'
         )
 
         def get_files(subject):
-            out['key_list'] = [f % op.join('hcp-meg', subject) if '%' in f
-                               else f for f in out['key_list']]
-            return out
+            out_ = {k: v for k, v in out.items()}
+            out_['key_list'] = [f % op.join('hcp-meg', subject) if '%' in f
+                                else f for f in out['key_list']]
+            out_['prefix'] = out['prefix'].format(subject)
+            return out_
 
         return get_files
 
     locals()['src_fwd_%s' % decim] = src_forward()
+
+
+def src_fwd_all(subject):
+    key_list = sum([(
+        '%s/{}_white_dist-true-fwd.fif'.format(decim),
+        ) for decim in src_decims], ())
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
+    )
+
+    out['key_list'] = [f % op.join('hcp-meg', subject) if '%' in f
+                       else f for f in out['key_list']]
+    out['prefix'] = out['prefix'].format(subject)
+    return out
+
+
+def get_fwd_all(subject):
+    key_list = sum([(
+        '%s/{}_white_dist-true-fwd.fif'.format(decim),
+        ) for decim in src_decims], ())
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
+    )
+
+    out['key_list'] = [f % op.join('hcp-meg', subject) if '%' in f
+                       else f for f in out['key_list']]
+    out['prefix'] = out['prefix'].format(subject)
+    return out
 
 
 def get_bads_psd(subject):
