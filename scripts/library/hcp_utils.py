@@ -11,27 +11,34 @@ from .raw import decimate_raw
 
 
 def hcp_preprocess_ssp_ica(subject, run_index, recordings_path, decim=1,
-                           fmin=None, fmax=200, hcp_path=op.curdir, n_jobs=1,
+                           fmin=None, fmax=200, hcp_path=op.curdir,
+                           n_jobs=1,
                            n_ssp=16, return_noise=False):
 
-    annots = hcp.io.read_annot_hcp(
-        subject, hcp_path=hcp_path, data_type='rest',
-        run_index=run_index)
-    ica_mat = hcp.io.read_ica_hcp(
-        subject, hcp_path=hcp_path, data_type='rest',
-        run_index=run_index)
     raws = dict()
+    ica_mat = None
+    annots = None
     if not return_noise:
+        annots = hcp.io.read_annot_hcp(
+            subject, hcp_path=hcp_path, data_type='rest',
+            run_index=run_index)
+        ica_mat = hcp.io.read_ica_hcp(
+            subject, hcp_path=hcp_path, data_type='rest',
+            run_index=run_index)
         raws['raw'] = hcp.io.read_raw_hcp(
             subject, hcp_path=hcp_path, data_type='rest',
             run_index=run_index)
     raws['noise'] = hcp.io.read_raw_hcp(
         subject, hcp_path=hcp_path, data_type='noise_empty_room',
         run_index=0)
-    exclude = np.array(annots['ica']['ecg_eog_ic']) - 1
+    exclude = list()
+    if ica_mat is not None:
+        exclude = np.array(annots['ica']['ecg_eog_ic']) - 1
     for this_raw in raws.values():
         decimate_raw(this_raw, decim=decim)
-        this_raw.info['bads'] = annots['channels']['all']
+        if annots is not None:
+            this_raw.info['bads'] = annots['channels']['all']
+
         this_raw.pick_types(meg='mag', ref_meg=False)
         this_raw.filter(fmin, fmax, n_jobs=n_jobs, method='iir',
                         iir_params=dict(order=4, ftype='butter'))
@@ -47,8 +54,10 @@ def hcp_preprocess_ssp_ica(subject, run_index, recordings_path, decim=1,
 
     raw.add_proj(projs_noise)
     raw.apply_proj()
-    raw = interpolate_missing_channels(raw, subject=subject, data_type='rest',
-                                       hcp_path=hcp_path)
+    if not return_noise:
+        raw = interpolate_missing_channels(
+            raw, subject=subject, run_index=run_index, data_type='rest',
+            hcp_path=hcp_path)
     return raw
 
 
@@ -75,6 +84,8 @@ def hcp_compute_noise_cov(subject, recordings_path,
         subject=subject, run_index=0, recordings_path=recordings_path,
         decim=decim, hcp_path=hcp_path, n_jobs=n_jobs,
         n_ssp=n_ssp, return_noise=True)
+    if decim > 1:
+        decimate_raw(raw_noise, decim=decim)
     out = list()
     for fmin, fmax in filter_freq_ranges:
         raw_noise_ = raw_noise.copy()

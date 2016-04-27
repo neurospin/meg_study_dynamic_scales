@@ -74,6 +74,42 @@ def get_fwd_all(subject):
     return out
 
 
+def get_inv_oct6_broad_band(subject):
+    key_list = [
+        '%s/oct6_white_dist-true-none-none-inv.fif']
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
+    )
+
+    out['key_list'] = [f % op.join('hcp-meg', subject) if '%' in f
+                       else f for f in out['key_list']]
+    out['prefix'] = out['prefix'].format(subject)
+    return out
+
+
+def get_inv_oct5_broad_band(subject):
+    key_list = [
+        '%s/oct5_white_dist-true-none-none-inv.fif']
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
+    )
+
+    out['key_list'] = [f % op.join('hcp-meg', subject) if '%' in f
+                       else f for f in out['key_list']]
+    out['prefix'] = out['prefix'].format(subject)
+    return out
+
+
 def get_bads_psd(subject):
     key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
         'psds-bads-r0-1-50-times.npy',

@@ -124,9 +124,10 @@ def download_from_s3_bucket(bucket, out_path, key_list,
             key_path = key
         fname = op.join(out_path, key_path.lstrip('/'))
         files_written.append(fname)
-        if not op.exists(op.split(fname)[0]):
+        if not (op.exists(op.split(fname)[0]) or
+                op.islink(op.split(fname)[0])):
             os.makedirs(op.split(fname)[0])
-        if not op.exists(fname):
+        if not (op.exists(fname) or op.islink(fname)):
             aws_hacks.download_from_s3(
                 aws_access_key_id=aws_access_key_id,
                 aws_secret_access_key=aws_secret_access_key,
@@ -194,7 +195,7 @@ hcp_path = op.join(storage_dir, 'HCP')
 recordings_path = op.join(storage_dir, 'hcp-meg')
 for this_dir in [storage_dir, hcp_path, recordings_path]:
     # with multiple processes this can exist already
-    if not op.exists(this_dir):
+    if not op.exists(this_dir) or not op.islink(this_dir):
         try:
             os.makedirs(this_dir)
         except OSError, oserr:
@@ -208,11 +209,20 @@ if not args.hcp_no_anat:
     s3_files += hcp.io.file_mapping.get_s3_keys_anatomy(
         subject, hcp_path_bucket='HCP_900', mode=hcp_anatomy_output)
 if not args.hcp_no_meg:
+
     s3_files += hcp.io.file_mapping.get_s3_keys_meg(
-        subject, data_types=hcp_data_types,
+        subject, data_types=[
+            k for k in hcp_data_types if 'noise' not in k],
         onsets=hcp_onsets,
         hcp_path_bucket='HCP_900',
         outputs=hcp_outputs, run_inds=run_inds)
+    if any('noise' in k for k in hcp_data_types):
+        s3_files += hcp.io.file_mapping.get_s3_keys_meg(
+            subject, data_types=[
+                k for k in hcp_data_types if 'noise' in k],
+            onsets=hcp_onsets,
+            hcp_path_bucket='HCP_900',
+            outputs=hcp_outputs, run_inds=0)
 
 downloaded_files = list()
 if args.s3 is True:

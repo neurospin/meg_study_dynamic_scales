@@ -91,6 +91,7 @@ def compute_source_power_spectra(
         raw = hcp_preprocess_ssp_ica(
             subject=subject, run_index=run_index,
             recordings_path=recordings_path,
+            decim=decim,
             hcp_path=hcp_path, fmin=fmin, fmax=fmax, n_jobs=n_jobs,
             n_ssp=n_ssp, return_noise=False)
 
@@ -105,7 +106,9 @@ def compute_source_power_spectra(
                 mt_bandwidth=mt_bandwidth, adaptive=adaptive,
                 low_bias=low_bias,
                 inverse_operator=inverse_operator,
+                run_index=run_index,
                 n_jobs=n_jobs, recordings_path=recordings_path,
+                spacing=spacing,
                 subject=subject, run_id=run_id)
         )
         if compute_sensor_psds:
@@ -122,7 +125,8 @@ def compute_source_power_spectra(
 def _compute_source_psd(epochs, method, fmax, fmin, pick_ori,
                         label, pca, inv_split, inverse_operator, run_ii,
                         mt_bandwidth, adaptive, low_bias, run_index,
-                        n_jobs, recordings_path, subject):
+                        spacing,
+                        n_jobs, recordings_path, subject, run_id):
 
     gen_stc_epochs = mne.minimum_norm.compute_source_psd_epochs(
         epochs, inverse_operator,
@@ -133,21 +137,17 @@ def _compute_source_psd(epochs, method, fmax, fmin, pick_ori,
         adaptive=adaptive, low_bias=low_bias, return_generator=True,
         n_jobs=n_jobs, prepared=True)
     written_files = list()
-    if run_ii == 0:
-        written_files.append(
-            op.join(recordings_path, subject,
-                    'psds-bads-r%s-%s-%s-times.npy' % (
-                        run_index,
-                        (int(fmin) if fmin is not None else fmin),
-                        (int(fmax) if fmax is not None else fmax))))
     for ii, stc in enumerate(gen_stc_epochs):
-        print('stc epoch %s run %s' % (ii, run_ii))
+        print('stc epoch %s run %s' % (ii, run_index))
         written_files.append(
             op.join(recordings_path, subject,
-                    ('psds-e%s-r%s-%s-%s-stc.fif' % (
+                    ('psds-e%s-r%s-%s-%s-%s' % (
                         ii, run_index, int(0 if fmin is None else fmin),
-                        int(fmax))).lower()))
+                        int(fmax), spacing)).lower()))
         stc.save(written_files[-1])
+        written_files[-1] += '-lh.stc'
+        written_files.append(written_files[-1].replace('-lh.stc', '-rh.stc'))
+    return written_files
 
 
 def _psd_average_sensor_space(epochs, fmin, fmax, mt_bandwidth, n_jobs):
@@ -214,7 +214,7 @@ def compute_power_spectra(
         raise ValueError('"out" must be "epochs" or "average"')
 
     written_files = list()
-    for run_index in run_inds:
+    for run_ii, run_index in enumerate(run_inds):
 
         raw = hcp_preprocess_ssp_ica(
             subject=subject, run_index=run_index,
@@ -228,6 +228,13 @@ def compute_power_spectra(
 
         mne_psds, freqs = fun(epochs=epochs, fmin=fmin, fmax=fmax,
                               mt_bandwidth=mt_bandwidth, n_jobs=n_jobs)
+        if run_ii == 0:
+            written_files.append(
+                op.join(recordings_path, subject,
+                        'psds-r%i-%i-%i-times.npy' % (
+                            run_index, int(0 if fmin is None else fmin),
+                            int(fmax))))
+            np.save(written_files[-1], freqs)
 
         written_files.append(
             op.join(recordings_path, subject, 'psds-r%i-%i-%i-%s.fif' % (
@@ -355,7 +362,7 @@ def compute_power_spectra_and_bads(
 
 def compute_covariance(
         subject, recordings_path, filter_freq_ranges=None,
-        report=None, hcp_path=op.curdir, inverse_params=None,
+        report=None, hcp_path=op.curdir, inverse_params=None, decim=1,
         n_jobs=1, n_ssp=16, results_dir=None, run_id=None):
     if filter_freq_ranges is None:
         filter_freq_ranges = ((None, None),)
@@ -367,6 +374,7 @@ def compute_covariance(
     kwargs = dict(subject=subject, recordings_path=recordings_path,
                   hcp_path=hcp_path,
                   filter_freq_ranges=filter_freq_ranges,
+                  decim=decim,
                   n_jobs=n_jobs, n_ssp=n_ssp)
     written_files = list()
     for fmin, fmax, noise_cov, info in hcp_compute_noise_cov(**kwargs):
@@ -413,7 +421,7 @@ def compute_inverse_solution(subject, recordings_path, spacings=None,
             inv_params.update(fmin=fmin, fmax=fmax)
             noise_cov = mne.read_cov(
                 op.join(recordings_path, subject, 'noise-%s-%s-cov.fif' % (
-                    fmin, fmax)))
+                    fmin, fmax)).lower())
 
             inv_fname = inv_fname_tmp.format(**inv_params).lower()
             inverse_operator = mne.minimum_norm.make_inverse_operator(
@@ -429,14 +437,14 @@ def compute_inverse_solution(subject, recordings_path, spacings=None,
 def compute_covariance_and_inverse(
         subject, recordings_path, filter_freq_ranges=None,
         report=None, hcp_path=op.curdir, spacings=None,
-        inverse_params=None,
+        inverse_params=None, decim=1,
         n_jobs=1, n_ssp=16, results_dir=None, run_id=None):
     written_files = list()
     written_files.extend(
         compute_covariance(
             subject=subject, recordings_path=recordings_path,
-            filter_freq_ranges=recordings_path,
-            report=report, hcp_path=hcp_path,
+            filter_freq_ranges=filter_freq_ranges,
+            report=report, hcp_path=hcp_path, decim=decim,
             n_jobs=n_jobs, n_ssp=n_ssp, results_dir=results_dir,
             run_id=run_id))
     written_files.extend(
