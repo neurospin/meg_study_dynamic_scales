@@ -16,6 +16,7 @@ from hcp.preprocessing import set_eog_ecg_channels
 from .utils import mad_detect
 from .event import make_overlapping_events
 from .viz import plot_loglog
+from .stats import compute_log_linear_fit
 
 
 def dummy(subject):
@@ -61,6 +62,43 @@ def compute_ecg_events(
 
     return written_files
 
+
+def _get_epochs_for_subject(subject, recordings_path, pattern):
+    epochs_list = list()
+    for run_index in range(2):
+        psd_fname = op.join(recordings_path, subject, pattern.format(run=run_index))
+        if op.isfile(psd_fname):
+            epochs = mne.read_epochs(psd_fname)
+            if epochs.info['nchan'] == 248:
+                epochs_list.append(epochs)
+    if epochs_list:
+        epochs = mne.epochs.concatenate_epochs(epochs_list)
+    else:
+        epochs = None
+    return epochs
+
+
+def compute_log_linear_fit_epochs(subject, recordings_path, run_id=None,
+                                  pattern='psds-r{run}-0-150-epo.fif',
+                                  pattern_times='100307/psds-r0-1-150-times.npy',
+                                  sfmin=0.1, sfmax=1, n_jobs=1,
+                                  log_fun=np.log10):
+    written_files = list()
+    epochs = _get_epochs_for_subject(
+        subject=subject, recordings_path=recordings_path, pattern=pattern)
+    
+    freqs = np.load(op.join(results_dir, pattern_times))
+    out = dict(info=epochs.info.to_dict())
+    out['coefs'], out['intercepts'], out['msq'], out['r2'] = compute_log_linear_fit(
+        epochs.get_data(), freqs=freqs, sfmin=sfmin, sfmax=sfmax,
+        log_fun=log_fun)
+    written_files.append(
+        op.join(recordings_path, subject,
+                'psds-loglinear-fit-{}-{}.h5'.format(str(sfmin).replace('.', 'p'),
+                                                     str(sfmax).replace('.', 'p'))))
+    write_hdf5(written_files[-1], out, overwrite=True)
+    return written_files
+    
 
 def compute_source_power_spectra(
         subject, recordings_path,
@@ -164,6 +202,8 @@ def _psd_average_sensor_space(epochs, fmin, fmax, mt_bandwidth, n_jobs):
         data=X_psds, info=deepcopy(epochs.info), tmin=0, nave=1)
     hcp.preprocessing.transform_sensors_to_mne(mne_psds)
     return mne_psds, freqs
+
+
 
 
 def _psd_epochs_sensor_space(epochs, fmin, fmax, mt_bandwidth, n_jobs):
