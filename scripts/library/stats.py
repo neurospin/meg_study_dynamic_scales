@@ -6,6 +6,7 @@ import mne
 
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LinearRegression
 
 
 def lm_bcast(x, psds):
@@ -21,19 +22,26 @@ def compute_corr(x, y):
                     np.sum(ym * ym, axis=-1))
     r = np.sum(xm * ym, axis=-1) / r_den
     return r
+from sklearn.linear_model import LinearRegression
 
 
-def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg):
+def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg=None, log_fun=None):
     sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
-    x = np.log10(freqs[sfmask, None])
+    x = freqs[sfmask, None]
+    if log_fun is not None:
+        x = log_fun(x)
+    if reg is None:
+        reg = LinearRegression()
 
     coefs = list()
     intercepts = list()
     msq = list()
     r2 = list()
+    if log_fun is not None:
+        psds = log_fun(psds)
     for i_epoch, this_psd in enumerate(psds):
 
-        Y = np.log10(this_psd[:, sfmask].T)
+        Y = this_psd[:, sfmask].T
         reg.fit(x, Y)
         pred = reg.predict(x)
         msq.append(np.array(
