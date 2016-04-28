@@ -17,6 +17,7 @@ from .utils import mad_detect
 from .event import make_overlapping_events
 from .viz import plot_loglog
 from .stats import compute_log_linear_fit
+from mne.externals.h5io import write_hdf5
 
 
 def dummy(subject):
@@ -80,14 +81,14 @@ def _get_epochs_for_subject(subject, recordings_path, pattern):
 
 def compute_log_linear_fit_epochs(subject, recordings_path, run_id=None,
                                   pattern='psds-r{run}-0-150-epo.fif',
-                                  pattern_times='100307/psds-r0-1-150-times.npy',
+                                  pattern_times='100307/psds-r0-0-150-times.npy',
                                   sfmin=0.1, sfmax=1, n_jobs=1,
                                   log_fun=np.log10):
     written_files = list()
     epochs = _get_epochs_for_subject(
         subject=subject, recordings_path=recordings_path, pattern=pattern)
     
-    freqs = np.load(op.join(results_dir, pattern_times))
+    freqs = np.load(op.join(recordings_path, pattern_times))
     out = dict(info=epochs.info.to_dict())
     out['coefs'], out['intercepts'], out['msq'], out['r2'] = compute_log_linear_fit(
         epochs.get_data(), freqs=freqs, sfmin=sfmin, sfmax=sfmax,
