@@ -28,8 +28,6 @@ from sklearn.linear_model import LinearRegression
 def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg=None, log_fun=None):
     sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
     x = freqs[sfmask, None]
-    if log_fun is not None:
-        x = log_fun(x)
     if reg is None:
         reg = LinearRegression()
 
@@ -37,10 +35,9 @@ def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg=None, log_fun=None):
     intercepts = list()
     msq = list()
     r2 = list()
-    if log_fun is not None:
-        psds = log_fun(psds)
     for i_epoch, this_psd in enumerate(psds):
-
+        if log_fun is not None:
+            this_psd = log_fun(this_psd)
         Y = this_psd[:, sfmask].T
         reg.fit(x, Y)
         pred = reg.predict(x)

@@ -14,6 +14,7 @@ from argparse import ArgumentParser, REMAINDER
 import time
 import importlib
 import inspect
+import glob
 
 import pandas as pd
 
@@ -23,8 +24,6 @@ from mne.report import Report
 import hcp
 import mkl
 import aws_hacks
-
-mkl.set_num_threads(1)
 
 storage_dir = '/mnt'
 start_time_global = time.time()
@@ -66,6 +65,9 @@ parser.add_argument('--keep_files',
 parser.add_argument('--n_jobs', metavar='n_jobs', type=int,
                     nargs='?', default=1,
                     help='the number of jobs to run in parallel')
+parser.add_argument('--mkl_num_threads', metavar='mkl_num_threads', type=int,
+                    nargs='?', default=1,
+                    help='the number of threads to use per job')
 parser.add_argument('--s3', action='store_true',
                     help='skip s3')
 parser.add_argument('--s3_no_upload', action='store_true',
@@ -110,6 +112,25 @@ parser.add_argument('--downloaders', nargs='+', type=str,
                     help=additional_downloaders_doc)
 
 
+def s3_glob(key_pattern, bucket, prefix, aws_access_key_id, aws_secret_access_key,
+            host='s3.amazonaws.com'):
+    import boto
+    switch_validation = False
+    if host is not None and not isinstance(
+            host, boto.s3.connection.NoHostProvided):
+        if 'eu-central' in host:
+            switch_validation = True
+            os.environ['S3_USE_SIGV4'] = 'True'
+
+    com = boto.connect_s3(aws_access_key_id, aws_secret_access_key, host=host)
+    bucket = com.get_bucket(bucket, validate=False)
+    file_names = [key.name for key in bucket.list(prefix=prefix)]
+    if switch_validation:
+        del os.environ['S3_USE_SIGV4']
+    return [name for name in file_names if
+            glob.fnmatch.fnmatch(name, key_pattern)]
+
+
 def download_from_s3_bucket(bucket, out_path, key_list,
                             aws_access_key_id,
                             aws_secret_access_key,
@@ -118,21 +139,30 @@ def download_from_s3_bucket(bucket, out_path, key_list,
     start_time = time.time()
     files_written = list()
     for key in key_list:
-        if prefix:
-            key_path = key.split(prefix)[1]
+        if '?' in key or '*' in key:
+            key = s3_glob(key_pattern=key,
+                          bucket=bucket,
+                          prefix=prefix,
+                          aws_access_key_id=aws_access_key_id,
+                          aws_secret_access_key=aws_secret_access_key)
         else:
-            key_path = key
-        fname = op.join(out_path, key_path.lstrip('/'))
-        files_written.append(fname)
-        if not (op.exists(op.split(fname)[0]) or
-                op.islink(op.split(fname)[0])):
-            os.makedirs(op.split(fname)[0])
-        if not (op.exists(fname) or op.islink(fname)):
-            aws_hacks.download_from_s3(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                fname=fname,
-                bucket=bucket, key=key, **kwargs)
+            key = [key]
+        for this_key in key:
+            if prefix:
+                key_path = this_key.split(prefix)[1]
+            else:
+                key_path = this_key
+            fname = op.join(out_path, key_path.lstrip('/'))
+            files_written.append(fname)
+            if not (op.exists(op.split(fname)[0]) or
+                    op.islink(op.split(fname)[0])):
+                os.makedirs(op.split(fname)[0])
+            if not (op.exists(fname) or op.islink(fname)):
+                aws_hacks.download_from_s3(
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    fname=fname,
+                    bucket=bucket, key=this_key, **kwargs)
     elapsed_time = time.time() - start_time
     print('Elapsed time downloading {} from s3 {}'.format(
         bucket,
@@ -189,6 +219,8 @@ hcp_outputs = tuple(args.hcp_outputs)
 hcp_onsets = tuple(args.hcp_onsets)
 hcp_anatomy_output = args.hcp_anatomy_output
 hcp_data_types = tuple(args.hcp_data_types)
+
+mkl.set_num_threads(args.mkl_num_threads)
 
 
 hcp_path = op.join(storage_dir, 'HCP')

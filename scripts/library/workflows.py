@@ -497,3 +497,67 @@ def compute_covariance_and_inverse(
             hcp_path=hcp_path, run_id=run_id)
     )
     return written_files
+
+
+def get_brodmann_labels(spacing, subjects_dir):
+    src_orig = mne.setup_source_space(
+        subject='fsaverage', subjects_dir=subjects_dir, fname=None,
+        spacing=spacing, add_dist=False)
+
+    rh_brodman = op.join(
+        subjects_dir, 'fsaverage', 'label', 'rh.PALS_B12_Brodmann.annot')
+    lh_brodman = op.join(
+        subjects_dir, 'fsaverage', 'label', 'lh.PALS_B12_Brodmann.annot')
+
+    labels = list()
+    labels += mne.read_labels_from_annot(
+        subject='fsaverage', subjects_dir=subjects_dir,
+        annot_fname=lh_brodman, regexp="Brodmann*")
+    labels += mne.read_labels_from_annot(
+        subject='fsaverage', subjects_dir=subjects_dir,
+        annot_fname=rh_brodman, regexp="Brodmann*")
+
+    out_labels = list()
+    for label in labels:
+        label.values.fill(1.0)
+        out_labels.append(
+            label.morph('fsaverage', 'fsaverage', copy=False,
+                        subjects_dir=subjects_dir,
+                        grade=[ss['vertno'] for ss in src_orig]))
+    written_files = [
+        op.join(subjects_dir, 'fsaverage', 'label',
+                label.name.replace('Brodmann', 'Brodmann-%s' % spacing)) for
+        label in out_labels]
+    for label, fname in zip(out_labels, written_files):
+        label.save(fname)
+    return written_files
+
+
+def _morph_stcs_in_fsaverage(epochs, subjects_dir, src_orig, inverse_operator,
+                             method, lambda2=1./9., prepared=True):
+    stcs = mne.minimum_norm.apply_inverse_epochs(
+        epochs=epochs, inverse_operator=inverse_operator, lambda2=lambda2,
+        return_generator=True, prepared=prepared, method=method)
+    for stc in stcs:
+        yield stc.to_original_src(src_orig, subject_orig='fsaverage',
+                                  subjects_dir=subjects_dir)
+
+
+def get_label_time_courses(epochs, inverse_operator, src_orig, labels,
+                           subjects_dir,
+                           lambda2=1./9.,
+                           mode='pca_flip', orthogonalize=True,
+                           method='MNE', prepared=True):
+    stcs = _morph_stcs_in_fsaverage(
+        epochs=epochs,
+        subjects_dir=subjects_dir,
+        src_orig=src_orig,
+        prepared=prepared,
+        inverse_operator=inverse_operator, lambda2=lambda2, method=method)
+    labels_st = mne.extract_label_time_course(stcs, labels, src_orig, mode=mode)
+    for label_tc in labels_st:
+        if orthogonalize is True:
+            yield orthogonalize_householder(label_tc)
+        else:
+            yield label_tc
+
