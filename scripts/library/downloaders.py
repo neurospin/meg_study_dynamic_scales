@@ -148,6 +148,20 @@ def get_single_trial_source_psd(subject):
     return out
 
 
+def get_psds_times(subject):
+    key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
+        'psds-r0-0-150-times.npy',)]
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
+    )
+    return out
+
+
 def get_single_trial_psd(subject):
     key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
         'psds-r0-1-150-times.npy',

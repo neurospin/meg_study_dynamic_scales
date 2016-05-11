@@ -1,3 +1,4 @@
+import glob
 import os.path as op
 from copy import deepcopy
 
@@ -7,17 +8,18 @@ import pandas as pd
 import mne
 from mne.time_frequency import psd_multitaper
 import hcp
-
-from .hcp_utils import hcp_preprocess_ssp_ica
-from .hcp_utils import hcp_compute_noise_cov
+from hcp.workflows.anatomy import make_mne_anatomy
 from hcp import io
 from hcp.preprocessing import set_eog_ecg_channels
+from .hcp_utils import hcp_preprocess_ssp_ica
+from .hcp_utils import hcp_compute_noise_cov
 
 from .utils import mad_detect
 from .event import make_overlapping_events
 from .viz import plot_loglog
 from .stats import compute_log_linear_fit
 from mne.externals.h5io import write_hdf5
+from .downloaders import get_single_trial_source_psd
 
 
 def dummy(subject):
@@ -560,4 +562,100 @@ def get_label_time_courses(epochs, inverse_operator, src_orig, labels,
             yield orthogonalize_householder(label_tc)
         else:
             yield label_tc
+
+            
+def compute_source_outputs(subject, recordings_path, hcp_subjects_dir, hcp_path=op.curdir,
+                           anatomy_path=op.curdir,
+                           fmin=0, fmax=150,
+                           spacing='oct5', subjects_dir='/home/ubuntu/freesurfer/subjects',
+                           debug=False):
+    
+    make_mne_anatomy(subject=subject, anatomy_path=anatomy_path,
+                     recordings_path=recordings_path, hcp_path=hcp_path)
+    
+    freqs = np.load(op.join(recordings_path, subject, 'psds-r0-{}-{}-times.npy'.format(
+            fmin, fmax)))
+    if not op.exists(hcp_subjects_dir):
+        os.mkdir(hcp_subjects_dir)
+
+    if not op.exists(hcp_subjects_dir + '/fsaverage'):
+        os.symlink(subjects_dir + '/fsaverage',
+                   hcp_subjects_dir + '/fsaverage')
+    
+    src_orig = mne.setup_source_space(
+        subject='fsaverage', fname=None, spacing=spacing, add_dist=False,
+        subjects_dir=hcp_subjects_dir)
+    
+    stc_files = dict(r0=list(), r1=list(), r2=list())
+    i_find = 0
+    for fname in glob.glob(op.join(recordings_path, subject, '*stc')):  
+        if i_find >= 3 and debug is True:
+            break
+        for pattern in get_single_trial_source_psd(subject)['key_list']:
+            if i_find >= 3 and debug is True:
+                break
+            if glob.fnmatch.fnmatch(fname, '*' + pattern):
+                if 'r1' in fname:
+                    key = 'r1'
+                elif 'r2' in fname:
+                    key = 'r2'
+                else:
+                    key = 'r0'
+                stc_files[key].append(fname)
+                i_find += 1
+
+    tmp = 'Brodmann-{spacing}.{num}-{hemi}.label'
+    brodmann_label_names = [tmp.format(spacing=spacing, num=num, hemi=hemi)
+                            for num in range(1, 48, 1) for hemi in ('lh', 'rh')
+                            if num not in [12, 13, 14, 15, 16, 34]]
+    labels = [mne.read_label(
+                  op.join(hcp_subjects_dir, 'fsaverage', 'label', fname))
+              for fname in brodmann_label_names]
+                
+    X = 0.
+    label_tcs = list()
+    stc = None
+    for ii, fname in enumerate(sum(stc_files.values(), [])):
+        stc = mne.read_source_estimate(fname)
+        stc.subject = subject
+        X += np.log10(stc.data)
+        stc = stc.to_original_src(src_orig, 'fsaverage',
+                                  subjects_dir=hcp_subjects_dir)
+        label_tcs.append(
+            np.array([stc.extract_label_time_course(label,
+                                                    src_orig,
+                                                    mode='mean')
+                      for label in labels]))
+    label_tcs = np.array(label_tcs)
+
+    if stc is None:
+        raise RuntimeError('could not stc files')
+    mean_power_stc = stc.copy()
+    mean_power_stc._data = X
+    mean_power_stc._data /= ii
+    mean_power_stc.times
+    
+    def stc_gen(stc_files):
+        for ii, fnames in enumerate(sum(stc_files.values(), [])):
+            stc = mne.read_source_estimate(fname)
+            yield stc.data
+
+    coefs_, _, mse_, _ = compute_log_linear_fit(
+        stc_gen(stc_files), freqs=freqs, sfmin=0.1, sfmax=1.,
+        log_fun=np.log10)
+
+    mean_coefs_stc = stc.copy()    
+    mean_coefs_stc._data = coefs_.T
+    mean_coefs_stc.times = np.arange(len(coefs_))
+    mean_mse_stc = stc.copy()    
+    mean_mse_stc._data = mse_.T
+    mean_mse_stc.times = np.arange(len(mse_))
+    written_files = list()
+    for stc, kind in zip((mean_power_stc, mean_coefs_stc, mean_mse_stc),
+                         ('power', 'coefs', 'mse')):
+        written_files.append('{}-{}-{}'.format(kind, fmin, fmax))
+        stc.save(written_files[-1])
+        written_files[-1] += '-lh.stc'
+        written_files.append(written_files[-1].replace('-lh', '-rh'))
+    return written_files
 
