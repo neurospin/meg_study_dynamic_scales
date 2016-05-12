@@ -225,6 +225,7 @@ mkl.set_num_threads(args.mkl_num_threads)
 
 hcp_path = op.join(storage_dir, 'HCP')
 recordings_path = op.join(storage_dir, 'hcp-meg')
+anatomy_path = op.join(storage_dir, 'hcp-subjects')
 for this_dir in [storage_dir, hcp_path, recordings_path]:
     # with multiple processes this can exist already
     if not op.exists(this_dir) or not op.islink(this_dir):
@@ -302,7 +303,7 @@ else:
 # now add locals as function arguments if they are supported
 argspec = inspect.getargspec(fun)
 for arg in ['report', 'hcp_path', 'recordings_path', 'run_id', 'subject',
-            'run_inds']:
+            'run_inds', 'anatomy_path']:
     if arg in argspec.args:
         if arg == 'n_jobs':
             fun_args[arg] = 1

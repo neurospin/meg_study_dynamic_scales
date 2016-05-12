@@ -1,4 +1,5 @@
 import glob
+import os
 import os.path as op
 from copy import deepcopy
 
@@ -564,27 +565,28 @@ def get_label_time_courses(epochs, inverse_operator, src_orig, labels,
             yield label_tc
 
             
-def compute_source_outputs(subject, recordings_path, hcp_subjects_dir, hcp_path=op.curdir,
-                           anatomy_path=op.curdir,
+def compute_source_outputs(subject, recordings_path, anatomy_path, 
+                           hcp_path=op.curdir,
                            fmin=0, fmax=150,
-                           spacing='oct5', subjects_dir='/home/ubuntu/freesurfer/subjects',
+                           spacing='oct5',
+                           subjects_dir='/home/ubuntu/freesurfer/subjects',
                            debug=False):
     
     make_mne_anatomy(subject=subject, anatomy_path=anatomy_path,
                      recordings_path=recordings_path, hcp_path=hcp_path)
-    
-    freqs = np.load(op.join(recordings_path, subject, 'psds-r0-{}-{}-times.npy'.format(
+    # just use this as reference subject
+    freqs = np.load(op.join(recordings_path, '100307', 'psds-r0-{}-{}-times.npy'.format(
             fmin, fmax)))
-    if not op.exists(hcp_subjects_dir):
-        os.mkdir(hcp_subjects_dir)
+    if not op.exists(anatomy_path):
+        os.mkdir(anatomy_path)
 
-    if not op.exists(hcp_subjects_dir + '/fsaverage'):
+    if not op.exists(anatomy_path + '/fsaverage'):
         os.symlink(subjects_dir + '/fsaverage',
-                   hcp_subjects_dir + '/fsaverage')
+                   anatomy_path + '/fsaverage')
     
     src_orig = mne.setup_source_space(
         subject='fsaverage', fname=None, spacing=spacing, add_dist=False,
-        subjects_dir=hcp_subjects_dir)
+        subjects_dir=anatomy_path)
     
     stc_files = dict(r0=list(), r1=list(), r2=list())
     i_find = 0
@@ -603,13 +605,12 @@ def compute_source_outputs(subject, recordings_path, hcp_subjects_dir, hcp_path=
                     key = 'r0'
                 stc_files[key].append(fname)
                 i_find += 1
-
     tmp = 'Brodmann-{spacing}.{num}-{hemi}.label'
     brodmann_label_names = [tmp.format(spacing=spacing, num=num, hemi=hemi)
                             for num in range(1, 48, 1) for hemi in ('lh', 'rh')
                             if num not in [12, 13, 14, 15, 16, 34]]
     labels = [mne.read_label(
-                  op.join(hcp_subjects_dir, 'fsaverage', 'label', fname))
+                  op.join(anatomy_path, 'fsaverage', 'label', fname))
               for fname in brodmann_label_names]
                 
     X = 0.
@@ -620,7 +621,7 @@ def compute_source_outputs(subject, recordings_path, hcp_subjects_dir, hcp_path=
         stc.subject = subject
         X += np.log10(stc.data)
         stc = stc.to_original_src(src_orig, 'fsaverage',
-                                  subjects_dir=hcp_subjects_dir)
+                                  subjects_dir=anatomy_path)
         label_tcs.append(
             np.array([stc.extract_label_time_course(label,
                                                     src_orig,
@@ -657,5 +658,7 @@ def compute_source_outputs(subject, recordings_path, hcp_subjects_dir, hcp_path=
         stc.save(written_files[-1])
         written_files[-1] += '-lh.stc'
         written_files.append(written_files[-1].replace('-lh', '-rh'))
+    written_files.append('{}-{}-{}_label_tcs.npy'.format(kind, fmin, fmax))
+    np.save(writen_files[-1], label_tcs)
     return written_files
 
