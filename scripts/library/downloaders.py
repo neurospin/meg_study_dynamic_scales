@@ -133,7 +133,7 @@ def get_bads_psd(subject):
 
 def get_single_trial_source_psd(subject):
     key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
-        'psds-r0-1-150-times.npy',
+        'psds-r0-0-150-times.npy',
         'psds-e*-r?-0-150-oct5-?h.stc',
         'psds-e*-r?-0-150-?h.stc'
     )]

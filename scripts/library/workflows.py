@@ -564,18 +564,19 @@ def get_label_time_courses(epochs, inverse_operator, src_orig, labels,
         else:
             yield label_tc
 
-            
-def compute_source_outputs(subject, recordings_path, anatomy_path, 
+
+def compute_source_outputs(subject, recordings_path, anatomy_path,
                            hcp_path=op.curdir,
                            fmin=0, fmax=150,
                            spacing='oct5',
                            subjects_dir='/home/ubuntu/freesurfer/subjects',
                            debug=False):
-    
+
     make_mne_anatomy(subject=subject, anatomy_path=anatomy_path,
                      recordings_path=recordings_path, hcp_path=hcp_path)
     # just use this as reference subject
-    freqs = np.load(op.join(recordings_path, '100307', 'psds-r0-{}-{}-times.npy'.format(
+    freqs = np.load(
+        op.join(recordings_path, '100307', 'psds-r0-{}-{}-times.npy'.format(
             fmin, fmax)))
     if not op.exists(anatomy_path):
         os.mkdir(anatomy_path)
@@ -583,45 +584,50 @@ def compute_source_outputs(subject, recordings_path, anatomy_path,
     if not op.exists(anatomy_path + '/fsaverage'):
         os.symlink(subjects_dir + '/fsaverage',
                    anatomy_path + '/fsaverage')
-    
+
     src_orig = mne.setup_source_space(
         subject='fsaverage', fname=None, spacing=spacing, add_dist=False,
         subjects_dir=anatomy_path)
-    
+
     stc_files = dict(r0=list(), r1=list(), r2=list())
     i_find = 0
-    for fname in glob.glob(op.join(recordings_path, subject, '*stc')):  
+    for fname in glob.glob(op.join(recordings_path, subject, '*stc')):
         if i_find >= 3 and debug is True:
             break
         for pattern in get_single_trial_source_psd(subject)['key_list']:
             if i_find >= 3 and debug is True:
                 break
             if glob.fnmatch.fnmatch(fname, '*' + pattern):
-                if 'r1' in fname:
-                    key = 'r1'
-                elif 'r2' in fname:
-                    key = 'r2'
-                else:
-                    key = 'r0'
-                stc_files[key].append(fname)
-                i_find += 1
+                if fname.endswith('lh.stc'):
+                    if 'r1' in fname:
+                        key = 'r1'
+                    elif 'r2' in fname:
+                        key = 'r2'
+                    else:
+                        key = 'r0'
+                    stc_files[key].append(fname)
+                    i_find += 1
     tmp = 'Brodmann-{spacing}.{num}-{hemi}.label'
     brodmann_label_names = [tmp.format(spacing=spacing, num=num, hemi=hemi)
                             for num in range(1, 48, 1) for hemi in ('lh', 'rh')
                             if num not in [12, 13, 14, 15, 16, 34]]
     labels = [mne.read_label(
-                  op.join(anatomy_path, 'fsaverage', 'label', fname))
+              op.join(anatomy_path, 'fsaverage', 'label', fname))
               for fname in brodmann_label_names]
-                
+
     X = 0.
     label_tcs = list()
     stc = None
-    for ii, fname in enumerate(sum(stc_files.values(), [])):
+    for ii, fname in enumerate(sum(stc_files.values(), []), 1):
         stc = mne.read_source_estimate(fname)
+        if stc.data.shape[0] != sum(len(sp['vertno']) for sp in src_orig):
+            continue
         stc.subject = subject
+        stc = stc.to_original_src(
+            src_orig=src_orig, subject_orig='fsaverage',
+            subjects_dir=anatomy_path)
+        stc.subject = 'fsaverage'
         X += np.log10(stc.data)
-        stc = stc.to_original_src(src_orig, 'fsaverage',
-                                  subjects_dir=anatomy_path)
         label_tcs.append(
             np.array([stc.extract_label_time_course(label,
                                                     src_orig,
@@ -630,35 +636,42 @@ def compute_source_outputs(subject, recordings_path, anatomy_path,
     label_tcs = np.array(label_tcs)
 
     if stc is None:
-        raise RuntimeError('could not stc files')
+        raise RuntimeError('could not find stc files for %s' % subject)
     mean_power_stc = stc.copy()
     mean_power_stc._data = X
     mean_power_stc._data /= ii
-    mean_power_stc.times
-    
+    mean_power_stc.times[:] = freqs
+
     def stc_gen(stc_files):
         for ii, fnames in enumerate(sum(stc_files.values(), [])):
             stc = mne.read_source_estimate(fname)
+            stc = stc.to_original_src(
+                src_orig=src_orig, subject_orig='fsaverage',
+                subjects_dir=anatomy_path)
             yield stc.data
 
     coefs_, _, mse_, _ = compute_log_linear_fit(
         stc_gen(stc_files), freqs=freqs, sfmin=0.1, sfmax=1.,
         log_fun=np.log10)
 
-    mean_coefs_stc = stc.copy()    
+    mean_coefs_stc = stc.copy()
     mean_coefs_stc._data = coefs_.T
     mean_coefs_stc.times = np.arange(len(coefs_))
-    mean_mse_stc = stc.copy()    
+    mean_mse_stc = stc.copy()
     mean_mse_stc._data = mse_.T
     mean_mse_stc.times = np.arange(len(mse_))
     written_files = list()
     for stc, kind in zip((mean_power_stc, mean_coefs_stc, mean_mse_stc),
                          ('power', 'coefs', 'mse')):
-        written_files.append('{}-{}-{}'.format(kind, fmin, fmax))
+        written_files.append(
+            op.join(recordings_path, subject,
+                    '{}-{}-{}'.format(kind, fmin, fmax)))
         stc.save(written_files[-1])
         written_files[-1] += '-lh.stc'
         written_files.append(written_files[-1].replace('-lh', '-rh'))
-    written_files.append('{}-{}-{}_label_tcs.npy'.format(kind, fmin, fmax))
-    np.save(writen_files[-1], label_tcs)
+    written_files.append(
+        op.join(recordings_path, subject,
+                r'{}-{}-{}_label_tcs.npy'.format('power', fmin, fmax)))
+    np.save(written_files[-1], label_tcs)
     return written_files
 
