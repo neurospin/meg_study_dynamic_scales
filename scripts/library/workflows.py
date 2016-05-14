@@ -643,11 +643,13 @@ def compute_source_outputs(subject, recordings_path, anatomy_path,
     mean_power_stc.times[:] = freqs
 
     def stc_gen(stc_files):
-        for ii, fnames in enumerate(sum(stc_files.values(), [])):
+        for ii, fname in enumerate(sum(stc_files.values(), [])):
             stc = mne.read_source_estimate(fname)
+            stc.subject = fname.split('/')[-2]
             stc = stc.to_original_src(
                 src_orig=src_orig, subject_orig='fsaverage',
                 subjects_dir=anatomy_path)
+            stc.subject = 'fsaverage'
             yield stc.data
 
     coefs_, _, mse_, _ = compute_log_linear_fit(
