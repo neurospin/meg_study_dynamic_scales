@@ -195,3 +195,22 @@ def get_average_psd(subject):
         prefix='hcp-meg/{}'.format(subject)
     )
     return out
+
+
+def get_source_outputs(subject):
+    key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
+        'power-*stc',
+        'coefs-*stc',
+        'mse-*stc',
+        'mse-*label_tcs.npy'
+    )]
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
+    )
+
+    return out

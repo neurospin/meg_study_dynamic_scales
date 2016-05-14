@@ -70,6 +70,8 @@ parser.add_argument('--mkl_num_threads', metavar='mkl_num_threads', type=int,
                     help='the number of threads to use per job')
 parser.add_argument('--s3', action='store_true',
                     help='skip s3')
+parser.add_argument('--s3_overwrite_downloads', action='store_true',
+                    help='overwrite when downloading from s3')
 parser.add_argument('--s3_no_upload', action='store_true',
                     help='skip s3')
 parser.add_argument('--run_id', metavar='run_id', type=str,
@@ -112,7 +114,8 @@ parser.add_argument('--downloaders', nargs='+', type=str,
                     help=additional_downloaders_doc)
 
 
-def s3_glob(key_pattern, bucket, prefix, aws_access_key_id, aws_secret_access_key,
+def s3_glob(key_pattern, bucket, prefix,
+            aws_access_key_id, aws_secret_access_key,
             host='s3.amazonaws.com'):
     import boto
     switch_validation = False
@@ -134,7 +137,7 @@ def s3_glob(key_pattern, bucket, prefix, aws_access_key_id, aws_secret_access_ke
 def download_from_s3_bucket(bucket, out_path, key_list,
                             aws_access_key_id,
                             aws_secret_access_key,
-                            prefix='',
+                            prefix='', overwrite=False,
                             **kwargs):
     start_time = time.time()
     files_written = list()
@@ -157,7 +160,7 @@ def download_from_s3_bucket(bucket, out_path, key_list,
             if not (op.exists(op.split(fname)[0]) or
                     op.islink(op.split(fname)[0])):
                 os.makedirs(op.split(fname)[0])
-            if not (op.exists(fname) or op.islink(fname)):
+            if not (op.exists(fname) or op.islink(fname)) or overwrite:
                 aws_hacks.download_from_s3(
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_secret_access_key,
@@ -263,6 +266,7 @@ if args.s3 is True:
         bucket='hcp-openaccess', out_path=hcp_path, prefix='HCP_900',
         aws_access_key_id=hcp_aws_access_key_id,
         aws_secret_access_key=hcp_aws_secret_access_key,
+        overwrite=args.s3_overwrite_downloads,
         key_list=s3_files))
 
 if args.downloaders is not None:
@@ -276,7 +280,9 @@ if args.downloaders is not None:
                 raise ValueError('Could not guess %s' % out_path)
             out_path = op.join(out_path, subject)
         downloaded_files.extend(
-            download_from_s3_bucket(out_path=out_path, **pars))
+            download_from_s3_bucket(out_path=out_path,
+                                    overwrite=args.s3_overwrite_downloads,
+                                    **pars))
 
 # configure logging + provenance tracking magic
 # use fun_name for script name

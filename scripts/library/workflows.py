@@ -70,7 +70,8 @@ def compute_ecg_events(
 def _get_epochs_for_subject(subject, recordings_path, pattern):
     epochs_list = list()
     for run_index in range(2):
-        psd_fname = op.join(recordings_path, subject, pattern.format(run=run_index))
+        psd_fname = op.join(recordings_path, subject,
+                            pattern.format(run=run_index))
         if op.isfile(psd_fname):
             epochs = mne.read_epochs(psd_fname)
             if epochs.info['nchan'] == 248:
@@ -82,27 +83,29 @@ def _get_epochs_for_subject(subject, recordings_path, pattern):
     return epochs
 
 
-def compute_log_linear_fit_epochs(subject, recordings_path, run_id=None,
-                                  pattern='psds-r{run}-0-150-epo.fif',
-                                  pattern_times='100307/psds-r0-0-150-times.npy',
-                                  sfmin=0.1, sfmax=1, n_jobs=1,
-                                  log_fun=np.log10):
+def compute_log_linear_fit_epochs(
+        subject, recordings_path, run_id=None,
+        pattern='psds-r{run}-0-150-epo.fif',
+        pattern_times='100307/psds-r0-0-150-times.npy',
+        sfmin=0.1, sfmax=1, n_jobs=1, log_fun=np.log10):
     written_files = list()
     epochs = _get_epochs_for_subject(
         subject=subject, recordings_path=recordings_path, pattern=pattern)
-    
+
     freqs = np.load(op.join(recordings_path, pattern_times))
     out = dict(info=epochs.info.to_dict())
-    out['coefs'], out['intercepts'], out['msq'], out['r2'] = compute_log_linear_fit(
+    fun = compute_log_linear_fit
+    out['coefs'], out['intercepts'], out['msq'], out['r2'] = fun(
         epochs.get_data(), freqs=freqs, sfmin=sfmin, sfmax=sfmax,
         log_fun=log_fun)
     written_files.append(
         op.join(recordings_path, subject,
-                'psds-loglinear-fit-{}-{}.h5'.format(str(sfmin).replace('.', 'p'),
-                                                     str(sfmax).replace('.', 'p'))))
+                'psds-loglinear-fit-{}-{}.h5'.format(
+                    str(sfmin).replace('.', 'p'),
+                    str(sfmax).replace('.', 'p'))))
     write_hdf5(written_files[-1], out, overwrite=True)
     return written_files
-    
+
 
 def compute_source_power_spectra(
         subject, recordings_path,
@@ -206,8 +209,6 @@ def _psd_average_sensor_space(epochs, fmin, fmax, mt_bandwidth, n_jobs):
         data=X_psds, info=deepcopy(epochs.info), tmin=0, nave=1)
     hcp.preprocessing.transform_sensors_to_mne(mne_psds)
     return mne_psds, freqs
-
-
 
 
 def _psd_epochs_sensor_space(epochs, fmin, fmax, mt_bandwidth, n_jobs):
@@ -546,25 +547,6 @@ def _morph_stcs_in_fsaverage(epochs, subjects_dir, src_orig, inverse_operator,
                                   subjects_dir=subjects_dir)
 
 
-def get_label_time_courses(epochs, inverse_operator, src_orig, labels,
-                           subjects_dir,
-                           lambda2=1./9.,
-                           mode='pca_flip', orthogonalize=True,
-                           method='MNE', prepared=True):
-    stcs = _morph_stcs_in_fsaverage(
-        epochs=epochs,
-        subjects_dir=subjects_dir,
-        src_orig=src_orig,
-        prepared=prepared,
-        inverse_operator=inverse_operator, lambda2=lambda2, method=method)
-    labels_st = mne.extract_label_time_course(stcs, labels, src_orig, mode=mode)
-    for label_tc in labels_st:
-        if orthogonalize is True:
-            yield orthogonalize_householder(label_tc)
-        else:
-            yield label_tc
-
-
 def compute_source_outputs(subject, recordings_path, anatomy_path,
                            hcp_path=op.curdir,
                            fmin=0, fmax=150,
@@ -676,4 +658,3 @@ def compute_source_outputs(subject, recordings_path, anatomy_path,
                 r'{}-{}-{}_label_tcs.npy'.format('power', fmin, fmax)))
     np.save(written_files[-1], label_tcs)
     return written_files
-
