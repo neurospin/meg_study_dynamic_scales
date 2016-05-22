@@ -180,6 +180,21 @@ def get_single_trial_psd(subject):
     return out
 
 
+def get_1of_sensor_outputs(subject):
+    key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
+        'psds-loglinear-fit-0p1-1.h5',
+    )]
+    out = dict(
+        bucket='hcp-meg-data',
+        key_list=key_list,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        out_path='recordings_path',
+        prefix='hcp-meg/{}'.format(subject)
+    )
+    return out
+
+
 def get_average_psd(subject):
     key_list = ['hcp-meg/{}/'.format(subject) + k for k in (
         'psds-ave-r0-0-150-ave.fif',

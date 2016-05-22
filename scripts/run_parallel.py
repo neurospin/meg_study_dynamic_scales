@@ -74,12 +74,15 @@ if input_args.interpreter is not None:
 
 def run_parallel(script, args, par_args, par_target, sleep):
     """Run GNU parallel"""
+    # basic command params
     cmd = 'parallel -j {}'.format(n_par)
+    cmd += ' --delay {sleep}'.format(sleep=sleep)
     cmd += ' --progress'
-    cmd += ' {interpreter} {script} --{target} {args} '.format(
+    # python script and regular params
+    cmd += ' {interpreter} {script} --{target} {args}'.format(
         interpreter=interpreter,
         script=script, args=' '.join(args), target=par_target + ' {}')
-    cmd += '\n; sleep {sleep};'.format(sleep=sleep)
+    # parallel arguments
     cmd += ' {par_sep} {par_args}'.format(
         par_sep=par_sep, par_args=' '.join(par_args))
     command = shlex.split(cmd)
