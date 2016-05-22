@@ -69,7 +69,7 @@ def compute_ecg_events(
 
 def _get_epochs_for_subject(subject, recordings_path, pattern):
     epochs_list = list()
-    for run_index in range(2):
+    for run_index in range(3):
         psd_fname = op.join(recordings_path, subject,
                             pattern.format(run=run_index))
         if op.isfile(psd_fname):
