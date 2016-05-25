@@ -93,7 +93,7 @@ def compute_log_linear_fit_epochs(
         subject=subject, recordings_path=recordings_path, pattern=pattern)
 
     freqs = np.load(op.join(recordings_path, pattern_times))
-    out = dict(info=epochs.info.to_dict())
+    out = dict(info=dict(**epochs.info))
     fun = compute_log_linear_fit
     out['coefs'], out['intercepts'], out['msq'], out['r2'] = fun(
         epochs.get_data(), freqs=freqs, sfmin=sfmin, sfmax=sfmax,
