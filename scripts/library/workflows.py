@@ -9,8 +9,8 @@ import pandas as pd
 import mne
 from mne.time_frequency import psd_multitaper
 import hcp
-from hcp.workflows.anatomy import make_mne_anatomy
-from hcp import io
+from hcp.anatomy import compute_forward_stack
+import hcp
 from hcp.preprocessing import set_eog_ecg_channels
 from .hcp_utils import hcp_preprocess_ssp_ica
 from .hcp_utils import hcp_compute_noise_cov

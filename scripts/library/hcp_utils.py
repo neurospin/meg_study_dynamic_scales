@@ -5,7 +5,7 @@ import numpy as np
 import mne
 
 import hcp
-from hcp.preprocessing import apply_ica_hcp, interpolate_missing_channels
+from hcp.preprocessing import apply_ica_hcp, interpolate_missing
 
 from .raw import decimate_raw
 

@@ -25,7 +25,14 @@ def compute_corr(x, y):
 from sklearn.linear_model import LinearRegression
 
 
-def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg=None, log_fun=None):
+def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg=None, log_fun=None, 
+                           dB=True):
+    if log_fun is not None:
+        print('Applying log fun')
+        freqs = log_fun(freqs)
+        sfmin = log_fun(sfmin)
+        sfmax = log_fun(sfmax)
+    
     sfmask = mne.utils._time_mask(freqs, sfmin, sfmax)
     x = freqs[sfmask, None]
     if reg is None:
@@ -35,9 +42,13 @@ def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg=None, log_fun=None):
     intercepts = list()
     msq = list()
     r2 = list()
+    if dB:
+        print('multiplying by 10')
     for i_epoch, this_psd in enumerate(psds):
         if log_fun is not None:
             this_psd = log_fun(this_psd)
+        if dB:
+            this_psd *= 10
         Y = this_psd[:, sfmask].T
         reg.fit(x, Y)
         pred = reg.predict(x)
@@ -45,8 +56,9 @@ def compute_log_linear_fit(psds, freqs, sfmin, sfmax, reg=None, log_fun=None):
             [mean_squared_error(b, a) for a, b in zip(pred.T, Y.T)]))
         r2.append(np.array(
             [r2_score(b, a) for a, b in zip(pred.T, Y.T)]))
-        coefs.append(reg.coef_[:, 0])
-        intercepts.append(reg.intercept_)
+    
+        coefs.append(getattr(reg, 'estimator_', reg).coef_[:, 0])
+        intercepts.append(getattr(reg, 'estimator_', reg).intercept_)
 
     coefs = np.array(coefs)
     intercepts = np.array(intercepts)
