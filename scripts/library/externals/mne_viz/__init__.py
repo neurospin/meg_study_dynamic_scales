@@ -19,7 +19,7 @@ from mne.defaults import _handle_default
 from mne.viz.utils import (_draw_proj_checkbox, tight_layout, _check_delayed_ssp,
                            plt_show, _process_times)
 from mne.utils import logger, _clean_names, warn
-from mne.fixes import partial
+from functools import partial
 from mne.io.pick import pick_info
 from mne.viz.topo import _plot_evoked_topo
 from mne.viz.topomap import (_prepare_topo_plot, plot_topomap, _check_outlines,
