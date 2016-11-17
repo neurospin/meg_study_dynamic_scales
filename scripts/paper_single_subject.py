@@ -1,3 +1,4 @@
+import os
 import os.path as op
 
 import numpy as np
@@ -49,7 +50,7 @@ def _preprocess_raw(raw, hcp_params, ica_sel):
 
 
 def _compute_source_psd(epochs, noise_cov, fwd, n_fft=2 ** 15, method='MNE',
-                        lambda2=1./1.**2., decim=1, fmax=150):
+                        lambda2=1./1.**2., fmax=150):
     inv_op = make_inverse_operator(
         info=epochs.info, forward=fwd, noise_cov=noise_cov, loose=0.2,
         depth=0.8, fixed=False, limit_depth_chs=True, rank=None, verbose=None)
@@ -131,31 +132,36 @@ def make_fwd_stack(subject, subjects_dir, hcp_path, recordings_path,
             subjects_dir, subject, 'bem', '%s-%i-bem.fif' % (
                 subject, out['bem_sol']['solution'].shape[0]))
         mne.write_bem_solution(
-            fname_bem, out['bem'])
+            fname_bem, out['bem_sol'])
 
 
 def make_psds(subject, hcp_path, recordings_path, project_path, run_inds=(0,),
-              spacing='ico4', data_type='rest'):
+              spacing='ico4', data_type='rest', decim=1, n_fft=2 ** 15):
     hcp_params = dict(subject=subject, hcp_path=hcp_path,
                       data_type='rest')
 
     noise_cov = compute_noise_cov(
-        recordings_path=recordings_path, **hcp_params, methods=('empirical',))
+        recordings_path=recordings_path, methods=('empirical',), **hcp_params)
 
-    fwd = mne.read_forward_solution(
-        op.join(recordings_path, subject, '{}-{}-{}-{}-fwd.fif'.format(
-                surface='white', spacing=spacing, add_dist=True,
-                src_type='subject_on_fsaverage')))
+    fwd_fname = op.join(
+        recordings_path, subject,
+        '{surface}-{spacing}-{add_dist}-{src_type}-fwd.fif'.format(
+            surface='white', spacing=spacing, add_dist=True,
+            src_type='subject_on_fsaverage'))
+    if not op.exists(op.join(project_path, subject)):
+        os.makedirs(op.join(project_path, subject))
+
+    fwd = mne.read_forward_solution(fwd_fname)
     written_files = list()
     for run in run_inds:
         fname = op.join(recordings_path, subject,
-                        'rest-run%-preproc-raw.fif' % run)
+                        'rest-run%i-preproc-raw.fif' % run)
         raw = mne.io.read_raw_fif(fname)
         raw.load_data()
         raw = _preprocess_raw(raw,  hcp_params=hcp_params, ica_sel='ecg_eog')
 
         epochs_psd, stc_psd = _compute_psds(
-            raw, noise_cov, fwd, fmax=110, n_fft=2 ** 15, decim=1, lambda2=1.)
+            raw, noise_cov, fwd, fmax=110, n_fft=n_fft, decim=decim, lambda2=1.)
 
         written_files.append(
             op.join(project_path, subject, 'psd-broad-%i-epo.fif' % run))
@@ -169,8 +175,9 @@ def make_psds(subject, hcp_path, recordings_path, project_path, run_inds=(0,),
 
         raw.filter(8, 12)
         raw.apply_hilbert(picks=list(range(248)), envelope=False)
+
         epochs_psd_alpha, stc_psd_alpha = _compute_psds(
-            raw, noise_cov, fwd, fmax=50, n_fft=2 ** 15, decim=1, lambda2=1.)
+            raw, noise_cov, fwd, fmax=50, n_fft=n_fft, decim=decim, lambda2=1.)
 
         written_files.append(
             op.join(project_path, subject, 'psd-alpha-%i-epo.fif' % run))
@@ -180,9 +187,10 @@ def make_psds(subject, hcp_path, recordings_path, project_path, run_inds=(0,),
             op.join(project_path, subject, 'psd-alpha-%s-spacing-%s' % (
                     run, spacing)))
         stc_psd_alpha.save(written_files[-1], ftype='h5')
+    return written_files
 
 
-def _compute_psds(raw, noise_cov, fwd, fmax, n_fft=2 ** 15, decim=3,
+def _compute_psds(raw, noise_cov, fwd, fmax, n_fft=2 ** 15, decim=1,
                   lambda2=1.):
 
     duration = n_fft * (1. / raw.info['sfreq'])
@@ -195,20 +203,25 @@ def _compute_psds(raw, noise_cov, fwd, fmax, n_fft=2 ** 15, decim=3,
 
     psd_epochs, freqs = mne.time_frequency.psd_welch(epochs, n_fft=n_fft,
                                                      n_overlap=0, fmax=fmax)
+
+    stc_psd = _compute_source_psd(
+        epochs, noise_cov=noise_cov, fwd=fwd, method='MNE',
+        lambda2=lambda2, fmax=fmax)
+
     epochs._data = psd_epochs
     epochs.times = freqs
     del psd_epochs
 
-    stc_psd = _compute_source_psd(
-        epochs, noise_cov=noise_cov, fwd=fwd, method='MNE',
-        lambda2=lambda2, decim=decim, fmax=fmax)
     return epochs, stc_psd
 
 
-def run_all(subject, hcp_path='/mnt1/HCP',
-            project_path='/mnt2/dynamic-scales'):
+def run_all(subject, recordings_path, hcp_path='/mnt1/HCP',
+            project_path='/mnt2/dynamic-scales', run_inds=(0, 1, 2)):
     written_files = list()
-    written_files += make_psds(subject, hcp_path, project_path)
+    written_files += make_psds(subject, hcp_path=hcp_path,
+                               project_path=project_path,
+                               recordings_path=recordings_path,
+                               run_inds=run_inds)
     return written_files
 
 if __name__ == '__main__':
