@@ -203,13 +203,13 @@ def _compute_psds(raw, noise_cov, fwd, fmax, n_fft=2 ** 15, decim=1,
 
     psd_epochs, freqs = mne.time_frequency.psd_welch(epochs, n_fft=n_fft,
                                                      n_overlap=0, fmax=fmax)
-
     stc_psd = _compute_source_psd(
         epochs, noise_cov=noise_cov, fwd=fwd, method='MNE',
         lambda2=lambda2, fmax=fmax)
 
     epochs._data = psd_epochs
     epochs.times = freqs
+    epochs.info['description'] = 'n_fft=%i;fmax=%i' % (n_fft, fmax)
     del psd_epochs
 
     return epochs, stc_psd
