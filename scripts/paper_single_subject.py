@@ -158,7 +158,8 @@ def make_psds(subject, hcp_path, recordings_path, project_path, run_inds=(0,),
                         'rest-run%i-preproc-raw.fif' % run)
         raw = mne.io.read_raw_fif(fname)
         raw.load_data()
-        raw = _preprocess_raw(raw,  hcp_params=hcp_params, ica_sel='ecg_eog')
+        if len(raw.info['bads']) > 0:
+            raw.interpolate_bads()
 
         epochs_psd, stc_psd = _compute_psds(
             raw, noise_cov, fwd, fmax=110, n_fft=n_fft, decim=decim, lambda2=1.)
